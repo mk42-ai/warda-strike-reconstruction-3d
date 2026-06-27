@@ -3,7 +3,7 @@ import CesiumScene from './cesium/CesiumScene.js';
 import { mountShahedInspector } from './three/Shahed136.js';
 import { SHAHED_SPECS } from './utils/geo.js';
 import {
-  META, IMPACT_SITE, CORRIDOR_ORIGIN, CORRIDOR, GEOFENCE, STATS, CAMERA_MODES, TIMELINE,
+  META, IMPACT_SITE, CORRIDOR_ORIGIN, CORRIDOR, GEOFENCE, STATS, CAMERA_MODES,
   analyzeThermal, VIIRS_DETECTIONS, INTEL, IMAGERY,
 } from './data/scenario.js';
 import {
@@ -18,7 +18,6 @@ export default function App() {
   const cesiumRef = useRef(null);
   const sceneRef = useRef(null);
   const inspectorRef = useRef(null);
-  const rafRef = useRef(0);
 
   const [ready, setReady] = useState(false);
   const [playing, setPlaying] = useState(false);
@@ -41,6 +40,14 @@ export default function App() {
     sceneRef.current = scene;
     scene.onReady(() => setReady(true));
     scene.onPick((p) => setPicked(p));
+    // SINGLE source of truth: the scene's authoritative driver loop pushes
+    // telemetry + playback state here every frame. React owns NO rAF loop, so
+    // the previously-stacked loops (playback + orbit/cinema refresh) are gone.
+    scene.onTick((r, st) => {
+      setReadout(r);
+      setProgress(r.progress);
+      setPlaying((prev) => (prev !== st.playing ? st.playing : prev));
+    });
     const r = scene.setProgress(0);
     setReadout(r);
 
@@ -55,36 +62,19 @@ export default function App() {
     return () => scene.destroy();
   }, []);
 
-  // -- playback loop ---------------------------------------------------------
-  useEffect(() => {
-    if (!playing) { cancelAnimationFrame(rafRef.current); return; }
-    let last = performance.now();
-    const tick = (now) => {
-      const dt = (now - last) / 1000; last = now;
-      setProgress((p) => {
-        let np = p + dt / TIMELINE.flightSeconds;
-        if (np >= 1) { np = 1; setPlaying(false); }
-        const r = sceneRef.current?.setProgress(np);
-        if (r) setReadout(r);
-        return np;
-      });
-      rafRef.current = requestAnimationFrame(tick);
-    };
-    rafRef.current = requestAnimationFrame(tick);
-    return () => cancelAnimationFrame(rafRef.current);
+  // NOTE: There is intentionally NO requestAnimationFrame loop in App. The
+  // CesiumScene driver loop is the SINGLE authoritative animation/camera loop;
+  // it advances playback, drives the camera, and reports back via onTick().
+  // React only flips intent (play/pause), which the driver reads. This removes
+  // the prior stacked loops that fought over the camera during the strike.
+  const togglePlay = useCallback(() => {
+    const on = sceneRef.current?.setPlaying(!playing);
+    setPlaying(!!on);
   }, [playing]);
-
-  // continuous camera refresh for orbit/cinema even when paused
-  useEffect(() => {
-    if (camMode !== 'orbit' && camMode !== 'cinema') return;
-    let id = 0;
-    const loop = () => { sceneRef.current?._applyCamera(); id = requestAnimationFrame(loop); };
-    id = requestAnimationFrame(loop);
-    return () => cancelAnimationFrame(id);
-  }, [camMode]);
 
   const onScrub = useCallback((e) => {
     const v = parseFloat(e.target.value);
+    if (!Number.isFinite(v)) return;          // guard slider NaN
     setProgress(v);
     const r = sceneRef.current?.setProgress(v);
     if (r) setReadout(r);
@@ -277,7 +267,7 @@ export default function App() {
             <button key={l} className={`chip ${layers[l] ? 'on' : ''}`} onClick={() => toggleLayer(l)}>{l}</button>
           ))}
         </div>
-        <button className="play" onClick={() => setPlaying((p) => !p)}>{playing ? '❚❚ PAUSE' : '▶ PLAY STRIKE'}</button>
+        <button className="play" onClick={togglePlay}>{playing ? '❚❚ PAUSE' : '▶ PLAY STRIKE'}</button>
         <input className="scrub" type="range" min="0" max="1" step="0.001" value={progress} onChange={onScrub} />
         <div className="prog">{Math.round(progress * 100)}%</div>
         <div className="stats">

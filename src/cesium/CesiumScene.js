@@ -23,6 +23,28 @@ const carto = (lon, lat, h = 0) => C.Cartesian3.fromDegrees(lon, lat, h);
 // Centralized CSS-colour parser (avoids repeating C.Color.fromCssColorString).
 const col = (css) => C.Color.fromCssColorString(css);
 
+// -- numeric guards: every value applied to the camera is validated ----------
+// A finite-number guard with a safe fallback. Used to clamp/validate ALL
+// interpolation math before it touches the camera so a single NaN/undefined
+// (e.g. from a degenerate look-ahead at t=1) can never corrupt camera state.
+const num = (v, fallback = 0) => (Number.isFinite(v) ? v : fallback);
+const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, num(v, lo)));
+// Critically-damped lerp: frame-rate-independent smoothing factor.
+// k≈ how fast we converge; dt = seconds since last frame.
+const damp = (current, target, k, dt) => {
+  const c = num(current, target);
+  const t = num(target, c);
+  return c + (t - c) * (1 - Math.exp(-k * Math.max(0, Math.min(0.1, dt))));
+};
+// Shortest-arc damp for headings (degrees) so 359°→1° doesn't spin the long way.
+const dampAngleDeg = (current, target, k, dt) => {
+  let c = num(current, target), t = num(target, c);
+  let d = ((t - c + 540) % 360) - 180;       // shortest signed delta
+  return c + d * (1 - Math.exp(-k * Math.max(0, Math.min(0.1, dt))));
+};
+// A Cartesian3 is only valid if all three components are finite.
+const validCartesian = (p) => !!p && Number.isFinite(p.x) && Number.isFinite(p.y) && Number.isFinite(p.z);
+
 export default class CesiumScene {
   constructor(container) {
     this.container = container;
@@ -33,7 +55,19 @@ export default class CesiumScene {
     this.progress = 0;
     this._cbReady = null;
     this._cbPick = null;
+    this._cbTick = null;
     this._orbitAngle = 0;
+
+    // -- single authoritative camera-driver state ----------------------------
+    // ONE requestAnimationFrame loop drives playback + camera (no stacked loops
+    // across the synchronized plays or thermal mode). React only sets target
+    // state and reads back via onTick(); it never owns an animation loop.
+    this._playing = false;        // scripted auto-play running?
+    this._trackMode = 'launch';   // current camera mode id
+    this._camState = null;        // smoothed camera frame {lon,lat,h,heading,pitch}
+    this._rafId = 0;
+    this._lastT = 0;
+    this._impactFired = false;
 
     // densified launch→impact ground track (great-circle corridor)
     const coords = corridorCoords();
@@ -54,13 +88,93 @@ export default class CesiumScene {
     this._buildDrone();
     this._buildThermalLayer();
     this._installPick();
+    this._installResize();
     this.setProgress(0);
     this.setCamMode('launch');
+    this._startLoop();              // start the SINGLE authoritative driver loop
     if (this._cbReady) this._cbReady();
   }
 
   onReady(cb) { this._cbReady = cb; if (this.viewer) cb(); }
   onPick(cb) { this._cbPick = cb; }
+  onTick(cb) { this._cbTick = cb; }   // React subscribes to per-frame readouts here
+
+  // ==========================================================================
+  //  SINGLE authoritative animation loop / camera driver.
+  //  Owns playback advance + camera smoothing + controls.update()-equivalent.
+  //  React NEVER runs its own requestAnimationFrame; it only flips _playing,
+  //  _trackMode, progress targets and reads back through onTick(). This removes
+  //  the previously-stacked rAF loops (playback loop + orbit/cinema refresh +
+  //  thermal) that fought over the camera and caused jumps/NaN during the strike.
+  // ==========================================================================
+  _startLoop() {
+    cancelAnimationFrame(this._rafId);   // never stack loops
+    this._lastT = performance.now();
+    const frame = (now) => {
+      if (this._destroyed) return;
+      const dt = Math.max(0, Math.min(0.1, (now - this._lastT) / 1000));
+      this._lastT = now;
+
+      // 1) advance scripted playback (auto-play) — the ONLY progress driver
+      if (this._playing) {
+        let np = this.progress + dt / TIMELINE.flightSeconds;
+        if (np >= 1) { np = 1; this._playing = false; }
+        this._setProgressInternal(np);
+      }
+
+      // 2) drive the camera every frame with damped smoothing (useFrame-style)
+      this._driveCamera(dt);
+
+      // 3) emit readout to React (telemetry HUD) — no React-side loop needed.
+      //    Throttle to actual changes so an idle scene doesn't re-render React
+      //    60×/s (matches the original "update only during motion" behaviour).
+      if (this._cbTick) {
+        const changed =
+          this._playing !== this._lastEmitPlaying ||
+          Math.abs(this.progress - (this._lastEmitProgress ?? -1)) > 1e-4;
+        if (changed) {
+          this._lastEmitPlaying = this._playing;
+          this._lastEmitProgress = this.progress;
+          this._cbTick(this.readout(), { playing: this._playing, progress: this.progress });
+        }
+      }
+
+      this._rafId = requestAnimationFrame(frame);
+    };
+    this._rafId = requestAnimationFrame(frame);
+  }
+
+  // resize handling: keep aspect ratio + projection matrix correct. Cesium's
+  // viewer.resize() recomputes the PerspectiveFrustum aspectRatio; we also
+  // re-assert near/far so frustum stays valid after canvas size changes.
+  _installResize() {
+    this._onResize = () => {
+      if (!this.viewer || this._destroyed) return;
+      try {
+        this.viewer.resize();
+        this._applyFrustum(this._trackMode);
+      } catch (_) {}
+    };
+    window.addEventListener('resize', this._onResize);
+    // also observe the host element (rail collapse etc. without window resize)
+    try {
+      this._ro = new ResizeObserver(() => this._onResize());
+      this._ro.observe(this.container);
+    } catch (_) { this._ro = null; }
+  }
+
+  // Per-mode near/far clipping planes (frustum). Tight planes near the building,
+  // wide planes for the Iran→Dubai corridor — updated on mode switch AND resize.
+  _applyFrustum(mode) {
+    const cam = this.viewer?.camera;
+    if (!cam || !cam.frustum || cam.frustum.near == null) return;
+    // building-scale modes need a close near plane; overview needs a far one.
+    const tight = (mode === 'impact' || mode === 'chase' || mode === 'thermal' || mode === 'topdown');
+    cam.frustum.near = tight ? 1.0 : 5.0;
+    cam.frustum.far = 30_000_000;
+    // PerspectiveFrustum recomputes aspectRatio from the canvas automatically;
+    // touching near/far is enough to refresh the projection matrix next render.
+  }
 
   // -- altitude from the real cannon-es ballistic profile (climb→cruise→dive) --
   _altAt(t) {
@@ -128,10 +242,33 @@ export default class CesiumScene {
     bloom.uniforms.sigma = 2.6;
     bloom.uniforms.stepSize = 1.0;
 
+    // -- OrbitControls-equivalent: free rotate + zoom + tilt at any time -------
+    // Cesium's screenSpaceCameraController IS the orbit/zoom controller. We give
+    // it enableDamping-style inertia and zoom limits scaled for the scene
+    // (Warda building ~40 m up to the whole Iran→Dubai corridor). During a
+    // scripted play these inputs are detached (see _setUserControls) so user
+    // orbit never fights the script; they resume cleanly afterwards.
     const cc = scene.screenSpaceCameraController;
     cc.enableCollisionDetection = true;
-    cc.minimumZoomDistance = 60;
-    cc.maximumZoomDistance = 12_000_000;
+    cc.enableInputs = true;
+    cc.enableRotate = true;
+    cc.enableZoom = true;
+    cc.enableTilt = true;
+    cc.enableTranslate = true;
+    cc.enableLook = true;
+    // inertia ≈ enableDamping with a sensible dampingFactor (0=off,→1=floaty)
+    cc.inertiaSpin = 0.85;
+    cc.inertiaTranslate = 0.85;
+    cc.inertiaZoom = 0.82;
+    // min/max zoom for scene scale: 40 m (building) → 18,000 km (full corridor)
+    cc.minimumZoomDistance = 40;
+    cc.maximumZoomDistance = 18_000_000;
+    this._userControls = cc;
+    // a perspective frustum with explicit, valid near/far from the start
+    if (scene.camera.frustum && scene.camera.frustum.near != null) {
+      scene.camera.frustum.near = 1.0;
+      scene.camera.frustum.far = 30_000_000;
+    }
 
     // dusk lighting matching the ~21:55Z night VIIRS detections
     const iso = `${'2026-06-22'}T${String(TIMELINE.startHour).padStart(2,'0')}:55:00Z`;
@@ -374,20 +511,43 @@ export default class CesiumScene {
   }
 
   // -- progress / animation update -------------------------------------------
+  // Public scrub/seek entry (React slider + waypoint nav). Updates the world
+  // geometry only; the SINGLE driver loop smoothly moves the camera next frame.
   setProgress(t) {
-    this.progress = Math.max(0, Math.min(1, t));
+    this._setProgressInternal(t);
+    return this.readout();
+  }
+
+  // Playback control: React flips this flag; the driver loop owns the advance.
+  // No React-side requestAnimationFrame is ever created (kills stacked loops).
+  setPlaying(on) {
+    this._playing = !!on;
+    if (this._playing && this.progress >= 1) this._setProgressInternal(0);
+    this._lastT = performance.now();   // avoid a dt spike on resume
+    return this._playing;
+  }
+
+  // Internal world-state advance: drone pose + glowing trail + impact flash.
+  // Every value is NaN-guarded so a degenerate sample can never poison state.
+  _setProgressInternal(t) {
+    this.progress = clamp(t, 0, 1);
     const p = this._posAt(this.progress);
-    this._dronePos = carto(p.lon, p.lat, p.height);
-    // heading from a short look-ahead
+    const lon = num(p.lon), lat = num(p.lat), h = num(p.height, IMPACT_SITE.height);
+    const dp = carto(lon, lat, h);
+    if (validCartesian(dp)) this._dronePos = dp;     // never apply a NaN position
+    // heading from a short look-ahead (guarded)
     const la = this._posAt(Math.min(1, this.progress + 0.004));
-    this._droneHeading = Math.atan2(la.lon - p.lon, la.lat - p.lat);
-    // build glowing trail up to current progress
+    const hd = Math.atan2(num(la.lon) - lon, num(la.lat) - lat);
+    this._droneHeading = num(hd, this._droneHeading || 0);
+    // build glowing trail up to current progress (skip any NaN samples)
     const trail = [];
     const steps = 80;
     for (let i = 0; i <= steps; i++) {
       const tt = (i / steps) * this.progress;
       const q = this._posAt(tt);
-      trail.push(q.lon, q.lat, q.height);
+      if (Number.isFinite(q.lon) && Number.isFinite(q.lat)) {
+        trail.push(q.lon, q.lat, num(q.height, IMPACT_SITE.height));
+      }
     }
     this._trail = C.Cartesian3.fromDegreesArrayHeights(trail);
 
@@ -398,9 +558,6 @@ export default class CesiumScene {
     } else if (this.progress < 0.9) {
       this._impactFired = false;
     }
-
-    this._applyCamera();
-    return this.readout();
   }
 
   _fireImpact() {
@@ -441,79 +598,179 @@ export default class CesiumScene {
     };
   }
 
-  // -- 8 camera modes ---------------------------------------------------------
+  // -- 8 camera modes (single-driver, eased, NaN-guarded) --------------------
+  // setCamMode no longer flyTo()s (async tweens fought the per-frame driver and
+  // caused the strike-sequence jumps). It records the mode, seeds the smoothed
+  // frame from the CURRENT real camera (so easing starts where the camera
+  // actually is → no snap), and resets the frustum + aspect. The single driver
+  // loop then damps toward the new framing.
   setCamMode(id) {
     this.camMode = id;
-    const cc = this.viewer.scene.screenSpaceCameraController;
-    const free = id === 'freefly';
-    cc.enableRotate = cc.enableTranslate = cc.enableZoom = cc.enableTilt = cc.enableLook = free || id === 'orbit';
-    if (id === 'launch') {
-      this.viewer.camera.flyTo({
-        destination: carto(LAUNCH_SITE.lon - 0.04, LAUNCH_SITE.lat - 0.05, 6500),
-        orientation: { heading: C.Math.toRadians(20), pitch: C.Math.toRadians(-28), roll: 0 }, duration: 1.4,
-      });
-    } else if (id === 'impact') {
-      this.viewer.camera.flyTo({
-        destination: carto(IMPACT_SITE.lon - 0.02, IMPACT_SITE.lat - 0.03, 4200),
-        orientation: { heading: C.Math.toRadians(18), pitch: C.Math.toRadians(-32), roll: 0 }, duration: 1.4,
-      });
-    } else if (id === 'freefly') {
-      this.flyOverview(1.4);
-    }
-    this._applyCamera(true);
+    this._trackMode = id;
+    this._camSettled = false;                    // begin a fresh eased transition
+    this._camFrame = this._currentCameraFrame() || this._camFrame; // start from reality
+    this._applyFrustum(id);                       // reset near/far for this mode
+    try { this.viewer.resize(); } catch (_) {}    // refresh aspect / projection matrix
+    return this.readout();
   }
 
-  _applyCamera(force = false) {
-    if (!this.viewer) return;
-    const id = this.camMode;
-    const p = this._posAt(this.progress);
-    // terminal-dive aware framing: steeper look-down as the munition noses over
-    const diving = this.progress >= (this.ballistic?.diveStart ?? 0.86);
-    const divePitchDeg = diving ? C.Math.toDegrees(p.pitch || 0) : 0;
-    const cam = this.viewer.camera;
-    const hdgDeg = bearing(
-      this._posAt(Math.max(0, this.progress - 0.01)).lon, this._posAt(Math.max(0, this.progress - 0.01)).lat,
-      p.lon, p.lat
-    );
+  // Read the live camera back into a {lon,lat,h,heading,pitch} frame so damped
+  // easing can begin from the camera's real pose (prevents snap on handoff).
+  _currentCameraFrame() {
+    try {
+      const cam = this.viewer.camera;
+      const c = cam.positionCartographic;
+      if (!c || !Number.isFinite(c.height)) return null;
+      return {
+        lon: C.Math.toDegrees(c.longitude),
+        lat: C.Math.toDegrees(c.latitude),
+        h: c.height,
+        heading: C.Math.toDegrees(cam.heading),
+        pitch: C.Math.toDegrees(cam.pitch),
+      };
+    } catch (_) { return null; }
+  }
 
-    if (id === 'chase') {
-      // tail-chase: follow the airframe pitch so the terminal dive frames correctly
-      const back = destPoint(p.lon, p.lat, (hdgDeg + 180) % 360, diving ? 900 : 1400);
-      const chasePitch = -12 + (diving ? divePitchDeg * 0.7 : 0);
-      cam.setView({ destination: carto(back[0], back[1], p.height + (diving ? 320 : 500)), orientation: { heading: C.Math.toRadians(hdgDeg), pitch: C.Math.toRadians(chasePitch), roll: 0 } });
-    } else if (id === 'topdown') {
-      cam.setView({ destination: carto(p.lon, p.lat, Math.max(9000, p.height + 9000)), orientation: { heading: C.Math.toRadians(hdgDeg), pitch: C.Math.toRadians(-89.9), roll: 0 } });
-    } else if (id === 'orbit') {
-      if (!force) this._orbitAngle += 0.0035;
-      const off = destPoint(p.lon, p.lat, (this._orbitAngle * 57.3) % 360, 2200);
-      cam.setView({ destination: carto(off[0], off[1], p.height + 1200), orientation: { heading: C.Math.toRadians((this._orbitAngle * 57.3 + 180) % 360), pitch: C.Math.toRadians(-20), roll: 0 } });
-    } else if (id === 'thermal') {
-      // EO/IR style: slightly behind + above the seeker, tilt tracks the dive
-      const back = destPoint(p.lon, p.lat, (hdgDeg + 180) % 360, diving ? 800 : 1100);
-      const irPitch = -22 + (diving ? divePitchDeg * 0.6 : 0);
-      cam.setView({ destination: carto(back[0], back[1], p.height + (diving ? 500 : 700)), orientation: { heading: C.Math.toRadians(hdgDeg), pitch: C.Math.toRadians(irPitch), roll: 0 } });
-    } else if (id === 'cinema') {
-      // auto-cut director: switch framing by phase
-      const phaseT = this.progress;
-      if (phaseT < 0.15) { const o = destPoint(p.lon, p.lat, (hdgDeg + 120) % 360, 1800); cam.setView({ destination: carto(o[0], o[1], p.height + 900), orientation: { heading: C.Math.toRadians((hdgDeg + 300) % 360), pitch: C.Math.toRadians(-16), roll: 0 } }); }
-      else if (phaseT > 0.85) { cam.setView({ destination: carto(IMPACT_SITE.lon - 0.015, IMPACT_SITE.lat - 0.02, 3000), orientation: { heading: C.Math.toRadians(18), pitch: C.Math.toRadians(-30), roll: 0 } }); }
-      else { const back = destPoint(p.lon, p.lat, (hdgDeg + 200) % 360, 1600); cam.setView({ destination: carto(back[0], back[1], p.height + 600), orientation: { heading: C.Math.toRadians((hdgDeg + 20) % 360), pitch: C.Math.toRadians(-10), roll: 0 } }); }
+  // Enable/detach user orbit+zoom input. Detached during scripted plays so user
+  // input never fights the script; re-enabled (from the camera's current pose,
+  // so no snap) when a scripted transition settles or playback stops.
+  _setUserControls(enabled) {
+    const cc = this._userControls;
+    if (!cc) return;
+    if (cc.enableInputs === enabled) return;      // avoid per-frame churn
+    cc.enableInputs = enabled;
+  }
+
+  // Compute the TARGET camera frame for a mode at the current progress. Returns
+  // {lon,lat,h,heading,pitch} (degrees) or null. All inputs NaN-guarded.
+  _targetFrame(mode) {
+    const frame = (lon, lat, h, headingDeg, pitchDeg) => {
+      if (!Number.isFinite(lon) || !Number.isFinite(lat) || !Number.isFinite(h)) return null;
+      return { lon, lat, h, heading: num(headingDeg, 0), pitch: clamp(pitchDeg, -89.9, 89.9) };
+    };
+    const p = this._posAt(this.progress);
+    const lon = num(p.lon), lat = num(p.lat), h = num(p.height, IMPACT_SITE.height);
+    const diving = this.progress >= (this.ballistic?.diveStart ?? 0.86);
+    const divePitchDeg = diving ? num(C.Math.toDegrees(num(p.pitch))) : 0;
+    const b0 = this._posAt(Math.max(0, this.progress - 0.01));
+    const hdgDeg = num(bearing(num(b0.lon, lon), num(b0.lat, lat), lon, lat), this._camFrame?.heading || 0);
+
+    switch (mode) {
+      case 'launch':
+        return frame(LAUNCH_SITE.lon - 0.04, LAUNCH_SITE.lat - 0.05, 6500, 20, -28);
+      case 'impact':
+        return frame(IMPACT_SITE.lon - 0.02, IMPACT_SITE.lat - 0.03, 4200, 18, -32);
+      case 'freefly': {
+        const midLon = (LAUNCH_SITE.lon + IMPACT_SITE.lon) / 2;
+        const midLat = (LAUNCH_SITE.lat + IMPACT_SITE.lat) / 2;
+        return frame(midLon - 0.2, midLat - 1.5, 360000, -18, -46);
+      }
+      case 'waypoint':
+        return this._waypointTarget || null;
+      case 'chase': {
+        const back = destPoint(lon, lat, (hdgDeg + 180) % 360, diving ? 900 : 1400);
+        return frame(back[0], back[1], h + (diving ? 320 : 500), hdgDeg, -12 + (diving ? divePitchDeg * 0.7 : 0));
+      }
+      case 'topdown':
+        return frame(lon, lat, Math.max(9000, h + 9000), hdgDeg, -89.9);
+      case 'orbit': {
+        this._orbitAngle += 0.0035;
+        const off = destPoint(lon, lat, (this._orbitAngle * 57.3) % 360, 2200);
+        return frame(off[0], off[1], h + 1200, (this._orbitAngle * 57.3 + 180) % 360, -20);
+      }
+      case 'thermal': {
+        const back = destPoint(lon, lat, (hdgDeg + 180) % 360, diving ? 800 : 1100);
+        return frame(back[0], back[1], h + (diving ? 500 : 700), hdgDeg, -22 + (diving ? divePitchDeg * 0.6 : 0));
+      }
+      case 'cinema': {
+        const t = this.progress;
+        if (t < 0.15) { const o = destPoint(lon, lat, (hdgDeg + 120) % 360, 1800); return frame(o[0], o[1], h + 900, (hdgDeg + 300) % 360, -16); }
+        if (t > 0.85) { return frame(IMPACT_SITE.lon - 0.015, IMPACT_SITE.lat - 0.02, 3000, 18, -30); }
+        const back = destPoint(lon, lat, (hdgDeg + 200) % 360, 1600);
+        return frame(back[0], back[1], h + 600, (hdgDeg + 20) % 360, -10);
+      }
+      default:
+        return null;
     }
-    // 'launch','impact','freefly' handled in setCamMode (static fly-to)
+  }
+
+  // The per-frame camera driver (called ONLY by the single loop). Decides who
+  // owns the camera this frame (script vs user), damps toward the target frame,
+  // validates every vector, and applies via setView — never an async flyTo.
+  _driveCamera(dt) {
+    if (!this.viewer) return;
+    const mode = this._trackMode;
+    const always = (mode === 'orbit' || mode === 'cinema');        // auto-cameras
+    const followWhilePlaying = (mode === 'chase' || mode === 'topdown' || mode === 'thermal');
+
+    // is the loop scripting the camera this frame?
+    let scripted;
+    if (always) scripted = true;
+    else if (this._playing && followWhilePlaying) scripted = true;
+    else scripted = !this._camSettled;                            // easing a one-shot move
+
+    // hand off input: detached while scripted, enabled (no snap) otherwise
+    this._setUserControls(!scripted);
+    if (!scripted) return;                                        // user owns the camera
+
+    const target = this._targetFrame(mode);
+    if (!target) { this._camSettled = true; return; }
+
+    // damped lerp/slerp toward target (frame-rate independent)
+    const k = always ? 3.0 : 4.5;
+    const f = this._camFrame ? { ...this._camFrame } : { ...target };
+    f.lon = damp(f.lon, target.lon, k, dt);
+    f.lat = damp(f.lat, target.lat, k, dt);
+    f.h = damp(f.h, target.h, k, dt);
+    f.heading = dampAngleDeg(f.heading, target.heading, k, dt);
+    f.pitch = clamp(damp(f.pitch, target.pitch, k, dt), -89.9, 89.9);
+
+    // validate BEFORE applying — a NaN here would corrupt the camera
+    const dest = carto(num(f.lon), num(f.lat), num(f.h, 100));
+    if (!validCartesian(dest) || !Number.isFinite(f.heading) || !Number.isFinite(f.pitch)) {
+      return; // skip this frame; keep last good camera
+    }
+    this._camFrame = f;
+    this.viewer.camera.setView({
+      destination: dest,
+      orientation: {
+        heading: C.Math.toRadians(f.heading),
+        pitch: C.Math.toRadians(f.pitch),
+        roll: 0,
+      },
+    });
+
+    // one-shot transitions: detect settle, then release control to the user
+    if (!always && !(this._playing && followWhilePlaying)) {
+      const settled =
+        Math.abs(f.lon - target.lon) < 1e-4 &&
+        Math.abs(f.lat - target.lat) < 1e-4 &&
+        Math.abs(f.h - target.h) < Math.max(2, Math.abs(target.h) * 0.01);
+      if (settled) this._camSettled = true;       // next frame → user controls
+    }
   }
 
   // -- waypoint navigation ----------------------------------------------------
   gotoWaypoint(i) {
     const wp = CORRIDOR.waypoints;
-    const idx = Math.max(0, Math.min(wp.length - 1, i));
+    const idx = clamp(i, 0, wp.length - 1);
     const t = idx / (wp.length - 1);
-    this.setProgress(t);
+    // stop scripted play so the waypoint move isn't fought by playback advance
+    this._playing = false;
+    this._setProgressInternal(t);
     const w = wp[idx];
-    const off = destPoint(w.lon, w.lat, 200, 5000);
-    this.viewer.camera.flyTo({
-      destination: carto(off[0], off[1], this._altAt(t) + 3500),
-      orientation: { heading: C.Math.toRadians(20), pitch: C.Math.toRadians(-30), roll: 0 }, duration: 1.2,
-    });
+    const off = destPoint(num(w.lon), num(w.lat), 200, 5000);
+    // record the eased target for the single driver (no async flyTo)
+    this._waypointTarget = {
+      lon: num(off[0], w.lon), lat: num(off[1], w.lat),
+      h: num(this._altAt(t) + 3500, 4000), heading: 20, pitch: -30,
+    };
+    this.camMode = 'waypoint';
+    this._trackMode = 'waypoint';
+    this._camSettled = false;                         // begin eased transition
+    this._camFrame = this._currentCameraFrame() || this._camFrame;
+    this._applyFrustum('waypoint');
+    try { this.viewer.resize(); } catch (_) {}
     return { idx, ...this.readout() };
   }
 
@@ -567,6 +824,9 @@ export default class CesiumScene {
 
   destroy() {
     this._destroyed = true;
+    cancelAnimationFrame(this._rafId);                 // stop the single driver loop
+    try { if (this._onResize) window.removeEventListener('resize', this._onResize); } catch (_) {}
+    try { this._ro && this._ro.disconnect(); } catch (_) {}
     try { this.handler && this.handler.destroy(); } catch (_) {}
     try { this.viewer && this.viewer.destroy(); } catch (_) {}
   }
