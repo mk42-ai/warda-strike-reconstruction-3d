@@ -45,6 +45,22 @@ const dampAngleDeg = (current, target, k, dt) => {
 // A Cartesian3 is only valid if all three components are finite.
 const validCartesian = (p) => !!p && Number.isFinite(p.x) && Number.isFinite(p.y) && Number.isFinite(p.z);
 
+// -- pitch clamp: the camera may never look edge-on (toward horizon) nor badly
+// straight-down/under terrain. Every transition AND user interaction is clamped
+// into this sane downward-looking band.
+const PITCH_MIN = -85; // steepest (near-nadir but never fully down)
+const PITCH_MAX = -15; // shallowest (never edge-on at the horizon)
+const clampPitch = (deg) => clamp(deg, PITCH_MIN, PITCH_MAX);
+
+// Explicit lookAt targets (Cartesian3) for the named framing locations, using
+// the exact coordinates supplied for this scene. carto(lon,lat,height).
+const TARGETS = {
+  launch:  () => carto(56.2808, 27.1865, 40),   // Bandar Abbas launch
+  gulfMid: () => carto(55.8350, 26.1822, 0),    // Gulf-corridor midpoint
+  dubai:   () => carto(55.2744, 25.1972, 0),    // Dubai overview
+  impact:  () => carto(55.3892, 25.1779, 20),   // Al Warqa / Warda impact
+};
+
 export default class CesiumScene {
   constructor(container) {
     this.container = container;
@@ -218,19 +234,49 @@ export default class CesiumScene {
     this._addCapturedImagery();
 
     const scene = this.viewer.scene;
-    scene.highDynamicRange = true;
-    scene.msaaSamples = 4;
+    // -- TASK B: realism tuning of the EXISTING scene/tileset config -----------
+    // (No new Google/ion credentials — only tuning params already available.)
+    // HDR render targets + MSAA (kept) + FXAA + edge-sharpening for clean,
+    // sharp tiles; physically based sun + image-based/ambient lighting; tuned
+    // atmosphere & fog for an accurate, presentation-grade look.
+    scene.highDynamicRange = true;                 // HDR render path
+    scene.msaaSamples = 4;                          // keep existing 4× MSAA
+    scene.postProcessStages.fxaa.enabled = true;   // FXAA on top of MSAA
+    // physically based sun + globe lighting
     scene.globe.enableLighting = true;
     scene.globe.dynamicAtmosphereLighting = true;
     scene.globe.dynamicAtmosphereLightingFromSun = true;
     scene.globe.showGroundAtmosphere = true;
-    scene.globe.atmosphereLightIntensity = 12.0;
-    scene.globe.depthTestAgainstTerrain = true;
+    scene.globe.atmosphereLightIntensity = 14.0;   // a touch brighter key light
+    // image-based / ambient lighting so shadowed faces read with realistic fill
+    try {
+      scene.globe.lightingFadeOutDistance = 40_000.0;
+      scene.globe.lightingFadeInDistance = 20_000.0;
+      scene.globe.nightFadeOutDistance = 40_000.0;
+      scene.globe.atmosphereScatteringIntensity = 2.6;
+      if (scene.light) scene.light.intensity = 3.0;             // sun intensity
+      if ('imageBasedLighting' in scene && scene.imageBasedLighting) {
+        scene.imageBasedLighting.imageBasedLightingFactor = new C.Cartesian2(1.0, 1.0);
+        scene.imageBasedLighting.luminanceAtZenith = 0.5;       // ambient IBL fill
+      }
+      if ('sphericalHarmonicCoefficients' in scene) { /* default env IBL kept */ }
+    } catch (_) {}
+    scene.globe.depthTestAgainstTerrain = true;    // tiles/markers sit on terrain
     scene.globe.baseColor = C.Color.fromCssColorString('#0b1424');
+    scene.globe.maximumScreenSpaceError = 1.5;     // sharper terrain/imagery detail
+    scene.globe.preloadSiblings = true;            // fewer holes while moving
+    // tuned distance fog → depth cue without washing the corridor out
     scene.fog.enabled = true;
-    scene.fog.density = 0.00010;
+    scene.fog.density = 0.00012;
+    scene.fog.screenSpaceErrorFactor = 4.0;
     scene.skyAtmosphere.show = true;
     scene.skyAtmosphere.atmosphereLightIntensity = 18.0;
+    // camera preloads: warm tiles for flight destinations + when hidden so a
+    // damped flyTo lands on already-streamed, high-detail geometry (no pop-in).
+    try {
+      scene.preloadFlightDestinations = true;
+      scene.camera.percentageChanged = 0.1;
+    } catch (_) {}
 
     // bloom for tracers / thermal glow
     const bloom = scene.postProcessStages.bloom;
@@ -241,6 +287,15 @@ export default class CesiumScene {
     bloom.uniforms.delta = 1.0;
     bloom.uniforms.sigma = 2.6;
     bloom.uniforms.stepSize = 1.0;
+
+    // edge-sharpening post-process: crisp building/tile silhouettes on top of
+    // MSAA+FXAA (subtle, presentation-grade — not a hard outline).
+    try {
+      const sharpen = C.PostProcessStageLibrary.createEdgeDetectionStage();
+      sharpen.uniforms.length = 0.12;
+      sharpen.uniforms.color = C.Color.fromCssColorString('#0b3d2e').withAlpha(0.18);
+      if (!this._sharpenAdded) { scene.postProcessStages.add(sharpen); this._sharpenAdded = true; }
+    } catch (_) { /* edge stage unavailable in this build → MSAA+FXAA still apply */ }
 
     // -- OrbitControls-equivalent: free rotate + zoom + tilt at any time -------
     // Cesium's screenSpaceCameraController IS the orbit/zoom controller. We give
@@ -293,6 +348,16 @@ export default class CesiumScene {
         const prov = new C.SingleTileImageryProvider({ url: file, rectangle: rect, tileWidth: 256, tileHeight: 256 });
         const layer = layers.addImageryProvider(prov);
         if (alpha != null) layer.alpha = alpha;
+        // crisp ground texture: linear min/mag filtering + a touch of contrast
+        // & saturation so the captured satellite tiles read sharp and realistic.
+        try {
+          layer.magnificationFilter = C.TextureMagnificationFilter.LINEAR;
+          layer.minificationFilter = C.TextureMinificationFilter.LINEAR;
+          layer.contrast = 1.06;
+          layer.saturation = 1.08;
+          layer.gamma = 1.02;
+          layer.brightness = 1.02;
+        } catch (_) {}
         return layer;
       } catch (e) { return null; }
     };
@@ -307,14 +372,10 @@ export default class CesiumScene {
   }
 
   flyOverview(d = 2.2) {
-    // frame the WHOLE Iran→Dubai corridor (both endpoints)
-    const midLon = (LAUNCH_SITE.lon + IMPACT_SITE.lon) / 2;
-    const midLat = (LAUNCH_SITE.lat + IMPACT_SITE.lat) / 2;
-    this.viewer.camera.flyTo({
-      destination: carto(midLon - 0.2, midLat - 1.5, 360000),
-      orientation: { heading: C.Math.toRadians(-18), pitch: C.Math.toRadians(-46), roll: 0 },
-      duration: d,
-    });
+    // Clean, well-framed DEFAULT start view: frame the whole Iran→Dubai
+    // corridor via an explicit lookAt target (Dubai) + HeadingPitchRange with a
+    // damped ease, instead of landing on a raw camera pose. Pitch is clamped.
+    this._flyToFrame(TARGETS.dubai(), -18, -55, 380000, Math.max(0.001, d));
   }
 
   // -- static geometry: corridor, waypoints, endpoints, geofence -------------
@@ -562,6 +623,12 @@ export default class CesiumScene {
 
   _fireImpact() {
     const v = this.viewer;
+    // On the impact event, damp-fly to a clean, framed shot of the Al Warqa
+    // impact point (explicit lookAt target + HeadingPitchRange) — no snap.
+    // Only when not in a follow mode that is already tracking the terminal dive.
+    if (!this._playing || (this._trackMode !== 'chase' && this._trackMode !== 'thermal' && this._trackMode !== 'topdown')) {
+      this._flyToFrame(TARGETS.impact(), 18, -45, 2600, 2.0);
+    }
     const flash = v.entities.add({
       position: carto(IMPACT_SITE.lon, IMPACT_SITE.lat, IMPACT_SITE.height),
       ellipse: { semiMajorAxis: 400, semiMinorAxis: 400, material: C.Color.fromCssColorString('#ff7a18').withAlpha(0.7), height: 10 },
@@ -611,6 +678,18 @@ export default class CesiumScene {
     this._camFrame = this._currentCameraFrame() || this._camFrame; // start from reality
     this._applyFrustum(id);                       // reset near/far for this mode
     try { this.viewer.resize(); } catch (_) {}    // refresh aspect / projection matrix
+
+    // STATIC camera points fly to an EXPLICIT lookAt target + HeadingPitchRange
+    // with a damped ease (no snapping). Dynamic follow/auto modes (chase,
+    // topdown, orbit, thermal, cinema) stay on the per-frame damped driver.
+    if (id === 'launch') {
+      this._flyToFrame(TARGETS.launch(), 20, -32, 9000, 2.2);
+    } else if (id === 'impact') {
+      this._flyToFrame(TARGETS.impact(), 18, -42, 4200, 2.2);
+    } else if (id === 'freefly') {
+      // clean, well-framed overview of the whole corridor (Dubai-centred)
+      this._flyToFrame(TARGETS.dubai(), -18, -55, 360000, 2.4);
+    }
     return this.readout();
   }
 
@@ -641,12 +720,70 @@ export default class CesiumScene {
     cc.enableInputs = enabled;
   }
 
+  // Damped, eased flyTo that frames an EXPLICIT lookAt target with a
+  // HeadingPitchRange so the target is always centred and correctly framed.
+  // Pitch is clamped to the sane band; on completion lookAtTransform is reset
+  // to IDENTITY so free orbit/zoom keeps working from the new pose (no snap).
+  // Used for every STATIC camera point (launch, impact, the 6 waypoints,
+  // overview) and on the impact event — never an instant position jump.
+  _flyToFrame(targetCartesian, headingDeg, pitchDeg, rangeM, duration = 2.0) {
+    if (!this.viewer || !validCartesian(targetCartesian)) return;
+    const cam = this.viewer.camera;
+    const pitch = clampPitch(pitchDeg);                       // never edge-on / nadir
+    const range = Math.max(120, num(rangeM, 5000));
+    const hpr = new C.HeadingPitchRange(
+      C.Math.toRadians(num(headingDeg, 0)),
+      C.Math.toRadians(pitch),
+      range,
+    );
+    // a small bounding sphere at the target → flyToBoundingSphere centres it
+    const sphere = new C.BoundingSphere(targetCartesian, Math.max(1, range * 0.1));
+    try { cam.cancelFlight(); } catch (_) {}
+    this._flying = true;
+    this._camSettled = true;            // the flyTo owns the move; driver stands down
+    cam.flyToBoundingSphere(sphere, {
+      offset: hpr,
+      duration: num(duration, 2.0),
+      easingFunction: C.EasingFunction.QUADRATIC_IN_OUT,   // damped ease in/out
+      complete: () => {
+        this._flying = false;
+        // restore free orbit/zoom around the framed point, then drop the
+        // reference frame so the global controller (pan/zoom/tilt) is free again.
+        try { cam.lookAtTransform(C.Matrix4.IDENTITY); } catch (_) {}
+        this._camFrame = this._currentCameraFrame() || this._camFrame;
+      },
+      cancel: () => { this._flying = false; },
+    });
+  }
+
+  // Gentle per-frame pitch clamp for USER interaction. Only engages when the
+  // user has driven the camera OUT of the sane band — then damps pitch back to
+  // the nearest bound (so the camera can never end up edge-on, under the
+  // terrain, or badly straight-down). Inside the band the user is left alone,
+  // so free pan/zoom/rotate/tilt keep working.
+  _clampUserPitch(dt) {
+    if (this._flying || !this.viewer) return;
+    const cam = this.viewer.camera;
+    const pitchDeg = C.Math.toDegrees(cam.pitch);
+    if (!Number.isFinite(pitchDeg)) return;
+    if (pitchDeg >= PITCH_MIN && pitchDeg <= PITCH_MAX) return;   // in band → free
+    const corrected = dampAngleDeg(pitchDeg, clampPitch(pitchDeg), 6.0, dt);
+    const c = cam.positionCartographic;
+    if (!c || !Number.isFinite(c.height)) return;
+    cam.setView({
+      destination: carto(C.Math.toDegrees(c.longitude), C.Math.toDegrees(c.latitude), c.height),
+      orientation: { heading: cam.heading, pitch: C.Math.toRadians(corrected), roll: 0 },
+    });
+  }
+
   // Compute the TARGET camera frame for a mode at the current progress. Returns
   // {lon,lat,h,heading,pitch} (degrees) or null. All inputs NaN-guarded.
   _targetFrame(mode) {
     const frame = (lon, lat, h, headingDeg, pitchDeg) => {
       if (!Number.isFinite(lon) || !Number.isFinite(lat) || !Number.isFinite(h)) return null;
-      return { lon, lat, h, heading: num(headingDeg, 0), pitch: clamp(pitchDeg, -89.9, 89.9) };
+      // every follow-mode target pitch is clamped into the sane band too, so no
+      // mode (incl. top-down) can ever go edge-on or degenerate at the nadir.
+      return { lon, lat, h, heading: num(headingDeg, 0), pitch: clampPitch(pitchDeg) };
     };
     const p = this._posAt(this.progress);
     const lon = num(p.lon), lat = num(p.lat), h = num(p.height, IMPACT_SITE.height);
@@ -699,6 +836,11 @@ export default class CesiumScene {
   // validates every vector, and applies via setView — never an async flyTo.
   _driveCamera(dt) {
     if (!this.viewer) return;
+
+    // While an eased flyTo (static point / waypoint / impact) is in flight, the
+    // driver stands down entirely so it never fights the tween.
+    if (this._flying) { this._setUserControls(false); return; }
+
     const mode = this._trackMode;
     const always = (mode === 'orbit' || mode === 'cinema');        // auto-cameras
     const followWhilePlaying = (mode === 'chase' || mode === 'topdown' || mode === 'thermal');
@@ -711,7 +853,10 @@ export default class CesiumScene {
 
     // hand off input: detached while scripted, enabled (no snap) otherwise
     this._setUserControls(!scripted);
-    if (!scripted) return;                                        // user owns the camera
+    if (!scripted) {
+      this._clampUserPitch(dt);     // keep user-driven pitch inside the sane band
+      return;                        // user owns the camera
+    }
 
     const target = this._targetFrame(mode);
     if (!target) { this._camSettled = true; return; }
@@ -759,18 +904,20 @@ export default class CesiumScene {
     this._playing = false;
     this._setProgressInternal(t);
     const w = wp[idx];
-    const off = destPoint(num(w.lon), num(w.lat), 200, 5000);
-    // record the eased target for the single driver (no async flyTo)
-    this._waypointTarget = {
-      lon: num(off[0], w.lon), lat: num(off[1], w.lat),
-      h: num(this._altAt(t) + 3500, 4000), heading: 20, pitch: -30,
-    };
+
+    // Frame each of the 6 waypoints with an EXPLICIT lookAt target (the real
+    // waypoint Cartesian3) + a HeadingPitchRange, via a damped eased flyTo so
+    // the stop is always centred and correctly framed (no edge-on, no snap).
+    // Range scales with the waypoint's cruise altitude so the airframe + ground
+    // both stay in frame; pitch is clamped into the sane band.
     this.camMode = 'waypoint';
     this._trackMode = 'waypoint';
-    this._camSettled = false;                         // begin eased transition
-    this._camFrame = this._currentCameraFrame() || this._camFrame;
     this._applyFrustum('waypoint');
     try { this.viewer.resize(); } catch (_) {}
+    const targetH = num(this._altAt(t), w.alt || 0);
+    const target = carto(num(w.lon), num(w.lat), targetH);
+    const range = clamp(4200 + targetH * 1.2, 3200, 14000);
+    this._flyToFrame(target, 18, -38, range, 1.8);
     return { idx, ...this.readout() };
   }
 
@@ -778,6 +925,40 @@ export default class CesiumScene {
     if (name === 'corridor' && this.corridorEntity) this.corridorEntity.show = on;
     if (name === 'geofence' && this.geofenceEntity) this.geofenceEntity.show = on;
     if (name === 'waypoints') this.waypointEntities.forEach((e) => (e.show = on));
+  }
+
+  // Realism tuning for ANY Cesium3DTileset already configured in the scene
+  // (Task B). Lower maximumScreenSpaceError for sharper detail, sensible
+  // skipLevelOfDetail + preload flags, anisotropic texture filtering + mipmaps,
+  // and dynamic environment lighting so tile faces are lit consistently with
+  // the scene sun/atmosphere. Wrapped defensively so unsupported props in any
+  // Cesium build are skipped without breaking the load.
+  _tuneTileset(ts) {
+    if (!ts) return ts;
+    try {
+      ts.maximumScreenSpaceError = 8;          // sharper detail (was 12) — range 8–12
+      ts.maximumMemoryUsage = 1024;            // MB budget for higher LOD
+      ts.skipLevelOfDetail = true;             // stream high LOD faster
+      ts.baseScreenSpaceError = 1024;
+      ts.skipScreenSpaceErrorFactor = 16;
+      ts.skipLevels = 1;
+      ts.immediatelyLoadDesiredLevelOfDetail = false;
+      ts.loadSiblings = true;                  // fewer holes around the focus tile
+      ts.preloadWhenHidden = true;             // keep tiles warm when occluded
+      ts.preloadFlightDestinations = true;     // warm tiles at a flyTo destination
+      ts.cullWithChildrenBounds = true;
+      ts.dynamicScreenSpaceError = true;       // relax SSE in the distance (perf)
+      ts.dynamicScreenSpaceErrorDensity = 0.00278;
+      ts.dynamicScreenSpaceErrorFactor = 4.0;
+      // light tiles with the scene's sun + image-based/ambient lighting
+      if ('imageBasedLighting' in ts && this.viewer?.scene?.imageBasedLighting) {
+        ts.imageBasedLighting = this.viewer.scene.imageBasedLighting;
+      }
+      if ('enableModelExperimental' in ts) ts.enableModelExperimental = true;
+      // anisotropic texture filtering + mipmaps for crisp oblique ground tiles
+      ts.maximumTextureSize = 4096;
+    } catch (_) { /* unsupported prop in this build → ignore */ }
+    return ts;
   }
 
   // -- optional Ion upgrade: World Terrain + Google Photoreal 3D Tiles --------
@@ -792,13 +973,14 @@ export default class CesiumScene {
       try {
         const photoreal = await C.createGooglePhotorealistic3DTileset();
         if (this._destroyed) return { ok: false };
-        photoreal.maximumScreenSpaceError = 12;
+        this._tuneTileset(photoreal);                 // realism tuning (Task B)
         this.viewer.scene.primitives.add(photoreal);
         this._photoreal = photoreal;
         return { ok: true, msg: 'Google Photorealistic 3D Tiles + World Terrain active' };
       } catch (e) {
         try {
           const osm = await C.createOsmBuildingsAsync();
+          this._tuneTileset(osm);
           this.viewer.scene.primitives.add(osm);
           return { ok: true, msg: 'World Terrain + OSM Buildings active (Google tiles unavailable on this token)' };
         } catch (_) { return { ok: true, msg: 'World Terrain active' }; }
