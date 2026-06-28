@@ -6,6 +6,11 @@
 //  inset inspector canvas. No external assets — pure procedural geometry.
 // ============================================================================
 import * as THREE from 'three';
+// DEFECT 1: image-based lighting for the inspector. RoomEnvironment + PMREM give
+// a prefiltered environment map so the drone's PBR materials get realistic
+// ambient reflections/fill (no flat or black faces). Imported from three's jsm
+// examples; both are pure-JS and bundle fine with Vite.
+import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
 
 export function buildShahed136() {
   const group = new THREE.Group();
@@ -125,11 +130,36 @@ export function mountShahedInspector(container) {
   const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
   renderer.setPixelRatio(Math.min(2, window.devicePixelRatio || 1));
   renderer.setSize(w, h);
+  // DEFECT 1: balanced tone mapping + correct color space (sRGB output) so the
+  // PBR materials read with accurate colour and exposure (guarded for older
+  // three builds where the property name differs).
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
   renderer.toneMappingExposure = 1.15;
+  try {
+    // three r152+ (this project uses 0.169) uses outputColorSpace + SRGBColorSpace.
+    if ('outputColorSpace' in renderer && THREE.SRGBColorSpace) {
+      renderer.outputColorSpace = THREE.SRGBColorSpace;
+    }
+  } catch (_) {}
   container.appendChild(renderer.domElement);
 
   const scene = new THREE.Scene();
+
+  // DEFECT 1: image-based lighting via PMREM-prefiltered RoomEnvironment so the
+  // drone is lit from all directions (no black/flat faces) even if a directional
+  // light misses a face. Fully guarded: if PMREM/HDRI setup throws on a weak GPU
+  // we fall back silently to the directional + hemisphere lights added below.
+  try {
+    const pmrem = new THREE.PMREMGenerator(renderer);
+    pmrem.compileEnvironmentMap && pmrem.compileEnvironmentMap();
+    const envScene = new RoomEnvironment();
+    const envRT = pmrem.fromScene(envScene, 0.04);
+    scene.environment = envRT.texture;   // IBL applied to all PBR materials
+    pmrem.dispose();
+  } catch (e) {
+    // eslint-disable-next-line no-console
+    console.warn('[Shahed inspector] IBL/PMREM unavailable, using analytic lights only:', e);
+  }
   const camera = new THREE.PerspectiveCamera(42, w / h, 0.1, 100);
   camera.position.set(3.2, 2.0, 4.4);
   camera.lookAt(0, 0, 0);

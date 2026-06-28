@@ -45,11 +45,34 @@ const dampAngleDeg = (current, target, k, dt) => {
 // A Cartesian3 is only valid if all three components are finite.
 const validCartesian = (p) => !!p && Number.isFinite(p.x) && Number.isFinite(p.y) && Number.isFinite(p.z);
 
+// -- DEFECT 2: soft radial particle sprite (fire/smoke/debris) ---------------
+// Generates a circular radial-gradient PNG data-URI at runtime so the strike
+// particle systems have a soft round texture without shipping any image asset.
+// Fully guarded: returns undefined if canvas/2d is unavailable (caller skips
+// that particle layer rather than crashing).
+const radialSprite = (inner, outer) => {
+  try {
+    const c = document.createElement('canvas');
+    c.width = c.height = 64;
+    const g = c.getContext('2d');
+    if (!g) return undefined;
+    const grad = g.createRadialGradient(32, 32, 0, 32, 32, 32);
+    grad.addColorStop(0, inner);
+    grad.addColorStop(0.5, outer);
+    grad.addColorStop(1, 'rgba(0,0,0,0)');
+    g.fillStyle = grad;
+    g.beginPath();
+    g.arc(32, 32, 32, 0, Math.PI * 2);
+    g.fill();
+    return c.toDataURL('image/png');
+  } catch (_) { return undefined; }
+};
+
 // -- pitch clamp: the camera may never look edge-on (toward horizon) nor badly
 // straight-down/under terrain. Every transition AND user interaction is clamped
 // into this sane downward-looking band.
 const PITCH_MIN = -85; // steepest (near-nadir but never fully down)
-const PITCH_MAX = -15; // shallowest (never edge-on at the horizon)
+const PITCH_MAX = -10; // shallowest (never edge-on / under-terrain at the horizon)
 const clampPitch = (deg) => clamp(deg, PITCH_MIN, PITCH_MAX);
 
 // Explicit lookAt targets (Cartesian3) for the named framing locations, using
@@ -315,6 +338,13 @@ export default class CesiumScene {
     scene.fog.screenSpaceErrorFactor = 4.0;
     scene.skyAtmosphere.show = true;
     scene.skyAtmosphere.atmosphereLightIntensity = 18.0;
+    // ACES tone mapping on the Cesium HDR pipeline — FEATURE-DETECTED so it
+    // no-ops on builds that lack the Tonemapper enum / postProcessStages slot.
+    try {
+      if ('Tonemapper' in C && scene.postProcessStages && 'tonemapper' in scene.postProcessStages) {
+        scene.postProcessStages.tonemapper = C.Tonemapper.ACES;
+      }
+    } catch (_) { /* tonemapper unsupported on this Cesium build → skip */ }
     // camera preloads: warm tiles for flight destinations + when hidden so a
     // damped flyTo lands on already-streamed, high-detail geometry (no pop-in).
     try {
@@ -390,15 +420,58 @@ export default class CesiumScene {
       scene.camera.frustum.far = 30_000_000;
     }
 
-    // dusk lighting matching the ~21:55Z night VIIRS detections
-    const iso = `${'2026-06-22'}T${String(TIMELINE.startHour).padStart(2,'0')}:55:00Z`;
-    this.viewer.clock.currentTime = C.JulianDate.fromIso8601(iso);
-    this.viewer.clock.shouldAnimate = false;
+    // -- DEFECT 1 FIX: physically sensible DAYLIGHT across all 8 camera modes ---
+    // The scene clock was previously pinned to night (~21:55Z) while globe
+    // lighting was ON, so with sun-driven lighting the globe, imagery, drone and
+    // buildings rendered dark/black in every camera mode. We set the clock to
+    // mid-MORNING LOCAL time over Dubai (Gulf Standard Time = UTC+4). 06:00Z =
+    // 10:00 local → a high, warm sun that lights the whole Iran→Dubai corridor
+    // consistently. Guarded so a bad date string can never abort init.
+    try {
+      // Fixed mid-MORNING daylight (summer-solstice sun, ~09:30Z). Stored on the
+      // instance so EVERY camera mode / play / thermal toggle can re-assert it
+      // via _applyDaylight() and the lighting can never flip to night.
+      this._dayIso = '2025-06-21T09:30:00Z';
+      this._applyDaylight();
+      // Make the sun the lighting source and ensure globe lighting is on so the
+      // daylight actually reaches terrain/imagery in every mode.
+      if (scene.sun) scene.sun.show = true;
+      if (scene.moon) scene.moon.show = false;
+      scene.globe.enableLighting = true;
+      // brighten the lit side so captured imagery never reads muddy/black
+      scene.globe.atmosphereLightIntensity = 20.0;
+      if (scene.light) {
+        scene.light = new C.SunLight();        // explicit physically based sun
+        scene.light.intensity = 3.0;
+      }
+    } catch (_) { /* keep default clock/lighting if anything is unavailable */ }
 
     // Terrain: default smooth ellipsoid (no network fetch). Relief is conveyed
     // by the 3D-photorealistic captured tiles draped as imagery; an optional
     // Cesium ion token can still upgrade to World Terrain via setIonToken().
     this.flyOverview(0);
+  }
+
+  // Re-assert the fixed DAYTIME clock + sun lighting. Called on init AND from
+  // every camera-mode switch / waypoint / thermal toggle / play so the scene
+  // lighting is GUARANTEED to stay daylight (never flips to night) in all modes.
+  // Fully guarded: a missing API or bad date string can never abort a mode switch.
+  _applyDaylight() {
+    try {
+      const scene = this.viewer && this.viewer.scene;
+      if (!scene) return;
+      if (this._dayIso) {
+        this.viewer.clock.currentTime = C.JulianDate.fromIso8601(this._dayIso);
+      }
+      scene.globe.enableLighting = true;                 // sun lighting in EVERY mode
+      if (scene.sun) scene.sun.show = true;
+      if (scene.moon) scene.moon.show = false;
+      if (scene.skyAtmosphere) scene.skyAtmosphere.show = true;
+      if (scene.fog) scene.fog.enabled = true;
+      scene.globe.showGroundAtmosphere = true;
+      // keep a physically based sun light (not a fixed flashlight at the camera)
+      try { if (!(scene.light instanceof C.SunLight)) { scene.light = new C.SunLight(); scene.light.intensity = 3.0; } } catch (_) {}
+    } catch (_) { /* never let a lighting refresh break a mode switch */ }
   }
 
   // Drape the REAL captured satellite/3D tiles as georeferenced local imagery
@@ -556,8 +629,41 @@ export default class CesiumScene {
     this._droneHeading = 0;
     this._trail = [];
 
+    // -- DEFECT 3 FIX: render the REAL 3D drone model in the play scene --------
+    // Previously the moving drone was a Cesium BILLBOARD built from an SVG data
+    // URI whose <svg> declared only a viewBox (no width/height) — Cesium could
+    // not rasterise it, so it drew a black quad ("black box"). We now load a
+    // real Shahed-136 glTF (public/models/shahed136.glb) as an entity.model,
+    // oriented along the flight heading + dive pitch. The billboard is kept as a
+    // GUARDED FALLBACK (shown only if the model fails to load) so the drone is
+    // never invisible. orientation is a CallbackProperty driven by the same
+    // _dronePos/_droneHeading the driver already updates each frame.
+    const positionCb = new C.CallbackProperty(() => this._dronePos, false);
+    const orientationCb = new C.CallbackProperty(() => {
+      try {
+        const hpr = new C.HeadingPitchRoll(
+          num(this._droneHeading, 0),
+          num(this._dronePitch, 0),
+          0,
+        );
+        return C.Transforms.headingPitchRollQuaternion(this._dronePos, hpr);
+      } catch (_) { return undefined; }
+    }, false);
+
+    this._modelFailed = false;
     this.droneEntity = v.entities.add({
-      position: new C.CallbackProperty(() => this._dronePos, false),
+      position: positionCb,
+      orientation: orientationCb,
+      model: {
+        uri: `${import.meta.env.BASE_URL || '/'}shahed136.glb`,
+        minimumPixelSize: 64,        // always ≥64px even from corridor distance
+        maximumScale: 2000,
+        scale: 12,                   // prominent but not unrealistic up close
+        runAnimations: false,
+        // rely on the GLB's own PBR materials + the scene sun (DEFECT 1 daylight)
+        heightReference: C.HeightReference.NONE,
+      },
+      // billboard fallback (hidden unless the model fails to load — see below)
       billboard: {
         image: MARKER_URIS.shahed,
         width: 46, height: 46,
@@ -565,6 +671,7 @@ export default class CesiumScene {
         alignedAxis: C.Cartesian3.UNIT_Z,
         disableDepthTestDistance: Number.POSITIVE_INFINITY,
         scaleByDistance: new C.NearFarScalar(3000, 1.6, 600000, 0.35),
+        show: new C.CallbackProperty(() => this._modelFailed === true, false),
       },
       label: {
         text: 'SHAHED-136 · OWA',
@@ -574,6 +681,19 @@ export default class CesiumScene {
         scaleByDistance: new C.NearFarScalar(40000, 1.0, 500000, 0.0),
       },
     });
+
+    // If the glTF fails to load (404 / decode error / GPU), reveal the billboard
+    // fallback so the drone is still visible — and log it. Guarded.
+    try {
+      const model = this.droneEntity.model;
+      if (model && model.readyEvent && model.errorEvent) {
+        model.errorEvent.addEventListener((err) => {
+          // eslint-disable-next-line no-console
+          console.warn('[CesiumScene] drone model failed to load → billboard fallback:', err);
+          this._modelFailed = true;
+        });
+      }
+    } catch (_) { /* older Cesium: rely on the model, fallback stays hidden */ }
 
     this.trailEntity = v.entities.add({
       polyline: {
@@ -625,9 +745,12 @@ export default class CesiumScene {
     // thermal palette: desaturate globe + lift bloom
     const scene = this.viewer.scene;
     scene.globe.baseColor = on ? C.Color.fromCssColorString('#0a0a0a') : C.Color.fromCssColorString('#0b1424');
-    scene.postProcessStages.bloom.uniforms.brightness = on ? 0.25 : -0.2;
-    scene.globe.atmosphereLightIntensity = on ? 3.0 : 12.0;
+    // guarded bloom (may be unavailable on this GPU after renderError recovery)
+    try { if (scene.postProcessStages && scene.postProcessStages.bloom) scene.postProcessStages.bloom.uniforms.brightness = on ? 0.25 : -0.2; } catch (_) {}
+    // restore the DAYLIGHT intensity (20.0) when leaving thermal, not the old 12.0
+    scene.globe.atmosphereLightIntensity = on ? 3.0 : 20.0;
     this.imageryAlpha(on ? 0.32 : 1.0);
+    if (!on) this._applyDaylight();              // re-assert daylight leaving thermal
     if (on) this.setCamMode('thermal');
   }
 
@@ -650,6 +773,7 @@ export default class CesiumScene {
     this._playing = !!on;
     if (this._playing && this.progress >= 1) this._setProgressInternal(0);
     this._lastT = performance.now();   // avoid a dt spike on resume
+    if (this._playing) this._applyDaylight();   // both plays start in daylight
     // HARDENING (fix): make sure nothing about the render/clock config can keep
     // the play sequence from advancing. The progress driver is our own rAF loop,
     // but we also wake the Cesium clock + force continuous rendering on Play so
@@ -684,6 +808,10 @@ export default class CesiumScene {
     const la = this._posAt(Math.min(1, this.progress + 0.004));
     const hd = Math.atan2(num(la.lon) - lon, num(la.lat) - lat);
     this._droneHeading = num(hd, this._droneHeading || 0);
+    // DEFECT 3: drive the loaded model's PITCH from the ballistic profile so the
+    // terminal dive renders nose-down (p.pitch is the signed flight-path angle:
+    // negative = descending → nose-down, which is exactly Cesium HPR's sign).
+    this._dronePitch = num(p.pitch, 0);
     // build glowing trail up to current progress (skip any NaN samples)
     const trail = [];
     const steps = 80;
@@ -707,24 +835,125 @@ export default class CesiumScene {
 
   _fireImpact() {
     const v = this.viewer;
-    // On the impact event, damp-fly to a clean, framed shot of the Al Warqa
-    // impact point (explicit lookAt target + HeadingPitchRange) — no snap.
-    // Only when not in a follow mode that is already tracking the terminal dive.
+    // -- DEFECT 2 FIX: unmistakable strike VFX at the Warda impact point -------
+    // The strike is now: (1) the active camera frames the impact, (2) a white
+    // flash, (3) an expanding shockwave ring, (4) a fireball + (5) rising smoke
+    // + (6) debris particle systems, and (7) a brief bloom boost so the blast
+    // glows. EVERY new piece is wrapped in try/catch so a GPU/runtime that lacks
+    // particles or post-processing degrades gracefully (the flash always shows)
+    // instead of crashing the play loop.
+
+    // (1) frame the impact (unless a follow-cam is already tracking the dive)
     if (!this._playing || (this._trackMode !== 'chase' && this._trackMode !== 'thermal' && this._trackMode !== 'topdown')) {
       this._flyToFrame(TARGETS.impact(), 18, -45, 2600, 2.0);
     }
+
+    // (2) white flash + (3) shockwave ring (entity-based, always available)
     const flash = v.entities.add({
       position: carto(IMPACT_SITE.lon, IMPACT_SITE.lat, IMPACT_SITE.height),
-      ellipse: { semiMajorAxis: 400, semiMinorAxis: 400, material: C.Color.fromCssColorString('#ff7a18').withAlpha(0.7), height: 10 },
-      point: { pixelSize: 26, color: C.Color.fromCssColorString('#fff2c0'), disableDepthTestDistance: Number.POSITIVE_INFINITY },
+      ellipse: { semiMajorAxis: 400, semiMinorAxis: 400, material: C.Color.fromCssColorString('#ff7a18').withAlpha(0.75), height: 10 },
+      point: { pixelSize: 30, color: C.Color.fromCssColorString('#fff2c0'), disableDepthTestDistance: Number.POSITIVE_INFINITY },
     });
-    let r = 400, op = 0.7;
+    const shock = v.entities.add({
+      position: carto(IMPACT_SITE.lon, IMPACT_SITE.lat, IMPACT_SITE.height + 4),
+      ellipse: {
+        semiMajorAxis: 120, semiMinorAxis: 120, height: 12,
+        fill: false, outline: true,
+        outlineColor: C.Color.fromCssColorString('#ffd27a').withAlpha(0.9), outlineWidth: 4,
+      },
+    });
+    let r = 400, op = 0.75, sr = 120;
     const grow = setInterval(() => {
-      r += 220; op -= 0.06;
-      if (op <= 0 || this._destroyed) { clearInterval(grow); v.entities.remove(flash); return; }
+      r += 240; op -= 0.05; sr += 520;
+      if (op <= 0 || this._destroyed) {
+        clearInterval(grow);
+        try { v.entities.remove(flash); v.entities.remove(shock); } catch (_) {}
+        return;
+      }
       flash.ellipse.semiMajorAxis = r; flash.ellipse.semiMinorAxis = r;
       flash.ellipse.material = C.Color.fromCssColorString('#ff7a18').withAlpha(Math.max(0, op));
+      shock.ellipse.semiMajorAxis = sr; shock.ellipse.semiMinorAxis = sr;
+      shock.ellipse.outlineColor = C.Color.fromCssColorString('#ffd27a').withAlpha(Math.max(0, op));
     }, 60);
+
+    // (4–6) particle systems: fireball + smoke + debris
+    try { this._spawnImpactParticles(); } catch (e) { /* particles unsupported → flash/shock still play */ }
+
+    // (7) brief bloom boost so the blast glows, then restore (guarded)
+    try {
+      const bloom = v.scene.postProcessStages && v.scene.postProcessStages.bloom;
+      if (bloom) {
+        const prev = bloom.uniforms.brightness;
+        bloom.enabled = true;
+        bloom.uniforms.brightness = 0.5;
+        setTimeout(() => { try { bloom.uniforms.brightness = this.thermal ? 0.25 : prev; } catch (_) {} }, 1400);
+      }
+    } catch (_) {}
+  }
+
+  // DEFECT 2 helper: three short-lived Cesium ParticleSystems at the impact
+  // point — a bright fireball, rising dark smoke, and scattered debris. Each is
+  // added to scene.primitives with an ENU model matrix and auto-removed after a
+  // few seconds. Fully guarded by the caller; any failure leaves the flash/shock
+  // intact. Uses runtime-generated radial sprites (no shipped image assets).
+  _spawnImpactParticles() {
+    const scene = this.viewer.scene;
+    if (!C.ParticleSystem || !C.CircleEmitter) return;   // capability check
+    const pos = carto(IMPACT_SITE.lon, IMPACT_SITE.lat, IMPACT_SITE.height + 6);
+    if (!validCartesian(pos)) return;
+    const modelMatrix = C.Transforms.eastNorthUpToFixedFrame(pos);
+    const fireImg = radialSprite('rgba(255,244,190,1)', 'rgba(255,122,24,0.9)');
+    const smokeImg = radialSprite('rgba(90,90,90,0.9)', 'rgba(40,40,40,0.6)');
+    const debrisImg = radialSprite('rgba(60,40,24,1)', 'rgba(20,14,8,0.7)');
+    const systems = [];
+
+    // fireball — fast, bright, short-lived, shrinking
+    if (fireImg) systems.push(new C.ParticleSystem({
+      image: fireImg, modelMatrix,
+      startColor: C.Color.fromCssColorString('#fff2c0').withAlpha(0.95),
+      endColor: C.Color.fromCssColorString('#ff4d18').withAlpha(0.0),
+      startScale: 1.0, endScale: 5.0,
+      minimumParticleLife: 0.5, maximumParticleLife: 1.4,
+      minimumSpeed: 18, maximumSpeed: 55,
+      imageSize: new C.Cartesian2(48, 48),
+      emissionRate: 0, // burst only
+      bursts: [ new C.ParticleBurst({ time: 0.0, minimum: 140, maximum: 200 }) ],
+      lifetime: 1.6,
+      emitter: new C.SphereEmitter(6.0),
+    }));
+    // smoke — slower, rising, expanding, longer-lived
+    if (smokeImg) systems.push(new C.ParticleSystem({
+      image: smokeImg, modelMatrix,
+      startColor: C.Color.fromCssColorString('#3a3a3a').withAlpha(0.8),
+      endColor: C.Color.fromCssColorString('#1a1a1a').withAlpha(0.0),
+      startScale: 2.0, endScale: 12.0,
+      minimumParticleLife: 1.8, maximumParticleLife: 3.5,
+      minimumSpeed: 4, maximumSpeed: 14,
+      imageSize: new C.Cartesian2(64, 64),
+      emissionRate: 60,
+      lifetime: 2.2,
+      emitter: new C.CircleEmitter(8.0),
+    }));
+    // debris — fast scattered dark specks on ballistic arcs
+    if (debrisImg) systems.push(new C.ParticleSystem({
+      image: debrisImg, modelMatrix,
+      startColor: C.Color.fromCssColorString('#3c2818').withAlpha(1.0),
+      endColor: C.Color.fromCssColorString('#140e08').withAlpha(0.0),
+      startScale: 0.6, endScale: 0.2,
+      minimumParticleLife: 0.8, maximumParticleLife: 2.0,
+      minimumSpeed: 30, maximumSpeed: 80,
+      imageSize: new C.Cartesian2(10, 10),
+      emissionRate: 0,
+      bursts: [ new C.ParticleBurst({ time: 0.0, minimum: 60, maximum: 100 }) ],
+      lifetime: 2.0,
+      emitter: new C.ConeEmitter(C.Math.toRadians(55)),
+    }));
+
+    systems.forEach((s) => { try { scene.primitives.add(s); } catch (_) {} });
+    // auto-cleanup after the blast finishes
+    setTimeout(() => {
+      systems.forEach((s) => { try { if (!s.isDestroyed || !s.isDestroyed()) scene.primitives.remove(s); } catch (_) {} });
+    }, 4200);
   }
 
   readout() {
@@ -761,6 +990,7 @@ export default class CesiumScene {
     this._camSettled = false;                    // begin a fresh eased transition
     this._camFrame = this._currentCameraFrame() || this._camFrame; // start from reality
     this._applyFrustum(id);                       // reset near/far for this mode
+    this._applyDaylight();                        // lighting never flips to night
     try { this.viewer.resize(); } catch (_) {}    // refresh aspect / projection matrix
 
     // STATIC camera points fly to an EXPLICIT lookAt target + HeadingPitchRange
@@ -875,6 +1105,11 @@ export default class CesiumScene {
     const divePitchDeg = diving ? num(C.Math.toDegrees(num(p.pitch))) : 0;
     const b0 = this._posAt(Math.max(0, this.progress - 0.01));
     const hdgDeg = num(bearing(num(b0.lon, lon), num(b0.lat, lat), lon, lat), this._camFrame?.heading || 0);
+    // LOOK-AHEAD bearing: aim the chase camera at a point slightly AHEAD of the
+    // drone along the path tangent (velocity direction), not straight at it, so
+    // the shot leads the airframe and feels cinematic.
+    const la = this._posAt(Math.min(1, this.progress + 0.02));
+    const lookAheadHdg = num(bearing(lon, lat, num(la.lon, lon), num(la.lat, lat)), hdgDeg);
 
     switch (mode) {
       case 'launch':
@@ -889,8 +1124,10 @@ export default class CesiumScene {
       case 'waypoint':
         return this._waypointTarget || null;
       case 'chase': {
-        const back = destPoint(lon, lat, (hdgDeg + 180) % 360, diving ? 900 : 1400);
-        return frame(back[0], back[1], h + (diving ? 320 : 500), hdgDeg, -12 + (diving ? divePitchDeg * 0.7 : 0));
+        // position BEHIND + ABOVE the drone (opposite the look-ahead heading),
+        // and aim along the look-ahead tangent so the camera leads the airframe.
+        const back = destPoint(lon, lat, (lookAheadHdg + 180) % 360, diving ? 900 : 1400);
+        return frame(back[0], back[1], h + (diving ? 320 : 500), lookAheadHdg, -12 + (diving ? divePitchDeg * 0.7 : 0));
       }
       case 'topdown':
         return frame(lon, lat, Math.max(9000, h + 9000), hdgDeg, -89.9);
@@ -987,6 +1224,7 @@ export default class CesiumScene {
     // stop scripted play so the waypoint move isn't fought by playback advance
     this._playing = false;
     this._setProgressInternal(t);
+    this._applyDaylight();                        // keep daylight at every waypoint
     const w = wp[idx];
 
     // Frame each of the 6 waypoints with an EXPLICIT lookAt target (the real
