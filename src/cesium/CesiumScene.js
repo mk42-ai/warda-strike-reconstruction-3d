@@ -234,14 +234,58 @@ export default class CesiumScene {
     this._addCapturedImagery();
 
     const scene = this.viewer.scene;
+
+    // -- render-error AUTO-RECOVERY (safety net) -------------------------------
+    // Cesium catches per-frame render exceptions, raises scene.renderError and
+    // (by default) STOPS rendering — which would freeze the play sequence with a
+    // blank/black canvas. We listen for it and, on the first error, strip the
+    // optional post-processing (bloom/silhouette), drop HDR/MSAA to the safe
+    // path, and keep the loop alive so the strike still plays. rethrowRenderErrors
+    // stays false so a single bad frame never kills the app.
+    try {
+      scene.rethrowRenderErrors = false;
+      scene.renderError.addEventListener((_scene, err) => {
+        if (this._renderRecovered) return;     // recover once
+        this._renderRecovered = true;
+        // eslint-disable-next-line no-console
+        console.warn('[CesiumScene] renderError — disabling post-processing and recovering:', err);
+        try {
+          const pp = scene.postProcessStages;
+          if (pp) { if (pp.bloom) pp.bloom.enabled = false; if (pp.fxaa) pp.fxaa.enabled = false; pp.removeAll && pp.removeAll(); }
+        } catch (_) {}
+        try { scene.highDynamicRange = false; } catch (_) {}
+        try { scene.msaaSamples = 1; } catch (_) {}
+        try { scene.requestRender(); } catch (_) {}
+      });
+    } catch (_) { /* renderError event unavailable → rely on per-call guards */ }
+
     // -- TASK B: realism tuning of the EXISTING scene/tileset config -----------
     // (No new Google/ion credentials — only tuning params already available.)
-    // HDR render targets + MSAA (kept) + FXAA + edge-sharpening for clean,
-    // sharp tiles; physically based sun + image-based/ambient lighting; tuned
-    // atmosphere & fog for an accurate, presentation-grade look.
-    scene.highDynamicRange = true;                 // HDR render path
-    scene.msaaSamples = 4;                          // keep existing 4× MSAA
-    scene.postProcessStages.fxaa.enabled = true;   // FXAA on top of MSAA
+    // HDR render targets + MSAA + FXAA + edge-sharpening for clean, sharp tiles;
+    // physically based sun + image-based/ambient lighting; tuned atmosphere/fog.
+    //
+    // HARDENING (fix): each advanced render feature is FEATURE-DETECTED and
+    // individually try/guarded so an unsupported GPU/context (e.g. SwiftShader,
+    // low-end mobile, headless) NO-OPS gracefully instead of throwing during
+    // construction or on scene.render(). A throw here used to abort the whole
+    // CesiumScene constructor → sceneRef stayed null → the Play button (which
+    // calls sceneRef.current?.setPlaying() with optional chaining) silently did
+    // nothing. Guarding every call is what keeps the scene — and Play — alive.
+    // HDR: only enable if the runtime reports support for it.
+    try {
+      if (scene.highDynamicRangeSupported !== false) scene.highDynamicRange = true;
+    } catch (_) { /* HDR unsupported → SDR path */ }
+    // MSAA: only when the context actually supports multisampling.
+    try {
+      if (scene.msaaSupported !== false) scene.msaaSamples = 4;
+      else scene.msaaSamples = 1;
+    } catch (_) { try { scene.msaaSamples = 1; } catch (__) {} }
+    // FXAA: cheap, broadly supported, but still guarded.
+    try {
+      if (scene.postProcessStages && scene.postProcessStages.fxaa) {
+        scene.postProcessStages.fxaa.enabled = true;
+      }
+    } catch (_) { /* FXAA unavailable → MSAA/native AA still apply */ }
     // physically based sun + globe lighting
     scene.globe.enableLighting = true;
     scene.globe.dynamicAtmosphereLighting = true;
@@ -278,24 +322,45 @@ export default class CesiumScene {
       scene.camera.percentageChanged = 0.1;
     } catch (_) {}
 
-    // bloom for tracers / thermal glow
-    const bloom = scene.postProcessStages.bloom;
-    bloom.enabled = true;
-    bloom.uniforms.glowOnly = false;
-    bloom.uniforms.contrast = 128;
-    bloom.uniforms.brightness = -0.2;
-    bloom.uniforms.delta = 1.0;
-    bloom.uniforms.sigma = 2.6;
-    bloom.uniforms.stepSize = 1.0;
+    // bloom for tracers / thermal glow (guarded: no-op if unavailable)
+    try {
+      const bloom = scene.postProcessStages.bloom;
+      if (bloom) {
+        bloom.enabled = true;
+        bloom.uniforms.glowOnly = false;
+        bloom.uniforms.contrast = 128;
+        bloom.uniforms.brightness = -0.2;
+        bloom.uniforms.delta = 1.0;
+        bloom.uniforms.sigma = 2.6;
+        bloom.uniforms.stepSize = 1.0;
+      }
+    } catch (_) { /* bloom unavailable on this GPU → skip glow */ }
 
     // edge-sharpening post-process: crisp building/tile silhouettes on top of
     // MSAA+FXAA (subtle, presentation-grade — not a hard outline).
+    //
+    // HARDENING (fix): an edge-detection stage MUST NOT be added to the pipeline
+    // on its own — it has to be wrapped in a silhouette COMPOSITE, and the whole
+    // feature requires post-process depth-texture support. Adding it raw (as the
+    // previous build did) throws inside scene.render() on GPUs/contexts without
+    // that support, which kills the render loop and freezes the play sequence.
+    // We now gate on PostProcessStageLibrary.isSilhouetteSupported(scene) and
+    // wrap the edge stage in createSilhouetteStage(), all inside try/catch, so
+    // it no-ops gracefully where unsupported (MSAA+FXAA still apply).
     try {
-      const sharpen = C.PostProcessStageLibrary.createEdgeDetectionStage();
-      sharpen.uniforms.length = 0.12;
-      sharpen.uniforms.color = C.Color.fromCssColorString('#0b3d2e').withAlpha(0.18);
-      if (!this._sharpenAdded) { scene.postProcessStages.add(sharpen); this._sharpenAdded = true; }
-    } catch (_) { /* edge stage unavailable in this build → MSAA+FXAA still apply */ }
+      const lib = C.PostProcessStageLibrary;
+      const supported = typeof lib.isSilhouetteSupported === 'function'
+        ? lib.isSilhouetteSupported(scene)
+        : false;
+      if (supported && !this._sharpenAdded) {
+        const edge = lib.createEdgeDetectionStage();
+        edge.uniforms.length = 0.10;
+        edge.uniforms.color = C.Color.fromCssColorString('#0b3d2e').withAlpha(0.16);
+        const silhouette = lib.createSilhouetteStage([edge]);
+        scene.postProcessStages.add(silhouette);
+        this._sharpenAdded = true;
+      }
+    } catch (_) { /* silhouette/edge unsupported on this GPU → MSAA+FXAA only */ }
 
     // -- OrbitControls-equivalent: free rotate + zoom + tilt at any time -------
     // Cesium's screenSpaceCameraController IS the orbit/zoom controller. We give
@@ -585,6 +650,25 @@ export default class CesiumScene {
     this._playing = !!on;
     if (this._playing && this.progress >= 1) this._setProgressInternal(0);
     this._lastT = performance.now();   // avoid a dt spike on resume
+    // HARDENING (fix): make sure nothing about the render/clock config can keep
+    // the play sequence from advancing. The progress driver is our own rAF loop,
+    // but we also wake the Cesium clock + force continuous rendering on Play so
+    // animation is guaranteed to run on every GPU/config.
+    try {
+      if (this.viewer) {
+        const scene = this.viewer.scene;
+        if (this._playing) {
+          this.viewer.clock.shouldAnimate = true;     // wake the clock
+          scene.requestRenderMode = false;            // never throttle while playing
+          scene.maximumRenderTimeChange = Infinity;
+          scene.requestRender();                       // kick an immediate frame
+        } else {
+          this.viewer.clock.shouldAnimate = false;
+        }
+      }
+      // re-arm the single driver loop if it was ever cancelled (defensive)
+      if (this._playing && !this._destroyed && !this._rafId) this._startLoop();
+    } catch (_) { /* non-fatal: rAF driver still advances progress */ }
     return this._playing;
   }
 

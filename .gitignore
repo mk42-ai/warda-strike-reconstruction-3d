@@ -10,3 +10,7 @@ dist/
 # logs / os
 *.log
 .DS_Store
+
+# deploy logs
+deploy_out.txt
+deploy_err.txt

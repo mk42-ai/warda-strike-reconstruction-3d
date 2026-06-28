@@ -36,30 +36,43 @@ export default function App() {
   // -- init Cesium + Three inspector ----------------------------------------
   useEffect(() => {
     if (!cesiumRef.current) return;
-    const scene = new CesiumScene(cesiumRef.current);
-    sceneRef.current = scene;
-    scene.onReady(() => setReady(true));
-    scene.onPick((p) => setPicked(p));
-    // SINGLE source of truth: the scene's authoritative driver loop pushes
-    // telemetry + playback state here every frame. React owns NO rAF loop, so
-    // the previously-stacked loops (playback + orbit/cinema refresh) are gone.
-    scene.onTick((r, st) => {
-      setReadout(r);
-      setProgress(r.progress);
-      setPlaying((prev) => (prev !== st.playing ? st.playing : prev));
-    });
-    const r = scene.setProgress(0);
-    setReadout(r);
+    let scene = null;
+    let insp = null;
+    // HARDENING (fix): wrap construction so that even if any single init step
+    // throws, sceneRef is still assigned (Play stays functional via the rAF
+    // progress driver) and the boot overlay is always cleared — the previous
+    // build could throw in the CesiumScene constructor, leaving sceneRef null
+    // (Play's optional-chained call no-opped) and the boot screen stuck on.
+    try {
+      scene = new CesiumScene(cesiumRef.current);
+      sceneRef.current = scene;
+      scene.onReady(() => setReady(true));
+      scene.onPick((p) => setPicked(p));
+      // SINGLE source of truth: the scene's authoritative driver loop pushes
+      // telemetry + playback state here every frame. React owns NO rAF loop.
+      scene.onTick((r, st) => {
+        setReadout(r);
+        setProgress(r.progress);
+        setPlaying((prev) => (prev !== st.playing ? st.playing : prev));
+      });
+      const r = scene.setProgress(0);
+      if (r) setReadout(r);
+      setReady(true);
+    } catch (e) {
+      // eslint-disable-next-line no-console
+      console.error('[App] CesiumScene init failed:', e);
+      setReady(true);   // never leave the UI stuck behind the boot overlay
+    }
 
-    // hide boot screen
+    // hide boot screen (always, even on init error)
     const boot = document.getElementById('boot-screen');
     if (boot) setTimeout(() => boot.classList.add('hidden'), 900);
 
-    if (inspectorRef.current) {
-      const insp = mountShahedInspector(inspectorRef.current);
-      return () => { insp.dispose(); scene.destroy(); };
-    }
-    return () => scene.destroy();
+    try { if (inspectorRef.current) insp = mountShahedInspector(inspectorRef.current); } catch (_) {}
+    return () => {
+      try { insp && insp.dispose(); } catch (_) {}
+      try { scene && scene.destroy(); } catch (_) {}
+    };
   }, []);
 
   // NOTE: There is intentionally NO requestAnimationFrame loop in App. The
