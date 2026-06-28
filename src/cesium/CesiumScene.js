@@ -410,9 +410,11 @@ export default class CesiumScene {
     cc.inertiaSpin = 0.85;
     cc.inertiaTranslate = 0.85;
     cc.inertiaZoom = 0.82;
-    // min/max zoom for scene scale: 40 m (building) → 18,000 km (full corridor)
-    cc.minimumZoomDistance = 40;
-    cc.maximumZoomDistance = 18_000_000;
+    // FIX 1: zoom must work fully — close to the building and far out to space.
+    // 5 m (right on the structure) → 20,000 km (well beyond the whole corridor).
+    cc.enableZoom = true;
+    cc.minimumZoomDistance = 5;
+    cc.maximumZoomDistance = 20_000_000;
     this._userControls = cc;
     // a perspective frustum with explicit, valid near/far from the start
     if (scene.camera.frustum && scene.camera.frustum.near != null) {
@@ -792,6 +794,16 @@ export default class CesiumScene {
       }
       // re-arm the single driver loop if it was ever cancelled (defensive)
       if (this._playing && !this._destroyed && !this._rafId) this._startLoop();
+      // FIX 1: when PAUSED, hand the camera fully back to the user — settle the
+      // one-shot driver and drop any reference-frame lock so zoom-out works
+      // immediately while paused (the camera must never stay frame-locked idle).
+      if (!this._playing && this.viewer) {
+        this._camSettled = true;
+        this._impactHold = false;
+        try { this.viewer.camera.lookAtTransform(C.Matrix4.IDENTITY); } catch (_) {}  // unconditional unlock
+        const cc = this._userControls;
+        if (cc) { cc.enableInputs = true; cc.enableZoom = true; cc.enableRotate = true; cc.enableTranslate = true; cc.enableTilt = true; }
+      }
     } catch (_) { /* non-fatal: rAF driver still advances progress */ }
     return this._playing;
   }
@@ -843,50 +855,90 @@ export default class CesiumScene {
     // particles or post-processing degrades gracefully (the flash always shows)
     // instead of crashing the play loop.
 
-    // (1) frame the impact (unless a follow-cam is already tracking the dive)
-    if (!this._playing || (this._trackMode !== 'chase' && this._trackMode !== 'thermal' && this._trackMode !== 'topdown')) {
-      this._flyToFrame(TARGETS.impact(), 18, -45, 2600, 2.0);
-    }
+    // (1) FIX 3: STABLE impact camera. The old code kept FOLLOWING the drone in
+    // chase/thermal/topdown at the impact instant — but the drone has stopped, so
+    // the per-frame follow jittered. We now ALWAYS stop following, switch the
+    // driver to the STATIC 'impact' frame, and damp-fly to centre the impact
+    // point, then HOLD steady (no jitter) for the whole explosion. _impactHold
+    // blocks any re-follow; after the blast we cleanly hand back to free orbit
+    // (lookAtTransform→IDENTITY via _setUserControls). Pitch is clamped (-45°).
+    this._impactHold = true;
+    this._prevTrackMode = this._trackMode;
+    this._trackMode = 'impact';          // static target → no drone follow
+    this._camSettled = true;             // the flyTo owns the move
+    try { this._flyToFrame(TARGETS.impact(), 18, -45, 2600, 2.2); } catch (_) {}
+    // release the hold + hand back to free orbit after the explosion settles
+    if (this._impactHoldTimer) { try { clearTimeout(this._impactHoldTimer); } catch (_) {} }
+    this._impactHoldTimer = setTimeout(() => {
+      if (this._destroyed) return;
+      this._impactHold = false;
+      this._camSettled = true;
+      try { this._setUserControls(true); } catch (_) {}   // resets IDENTITY + enables zoom
+    }, 5200);
 
-    // (2) white flash + (3) shockwave ring (entity-based, always available)
+    // (2a) bright WHITE FLASH billboard at the impact instant that fades fast.
+    // A camera-facing billboard reads as a true blast flash (not a ground disc)
+    // and is guaranteed visible regardless of view angle.
+    let flashBillboard = null;
+    try {
+      const flashImg = radialSprite('rgba(255,255,255,1)', 'rgba(255,240,200,0.85)');
+      if (flashImg) {
+        flashBillboard = v.entities.add({
+          position: carto(IMPACT_SITE.lon, IMPACT_SITE.lat, IMPACT_SITE.height + 30),
+          billboard: {
+            image: flashImg, width: 480, height: 480,
+            disableDepthTestDistance: Number.POSITIVE_INFINITY,
+            color: C.Color.WHITE.withAlpha(1.0),
+          },
+        });
+      }
+    } catch (_) {}
+
+    // (2b) hot ground flash disc + (3) fast-expanding SHOCKWAVE RING. Both bigger
+    // and longer than before so the blast clearly reads from any camera mode.
     const flash = v.entities.add({
       position: carto(IMPACT_SITE.lon, IMPACT_SITE.lat, IMPACT_SITE.height),
-      ellipse: { semiMajorAxis: 400, semiMinorAxis: 400, material: C.Color.fromCssColorString('#ff7a18').withAlpha(0.75), height: 10 },
-      point: { pixelSize: 30, color: C.Color.fromCssColorString('#fff2c0'), disableDepthTestDistance: Number.POSITIVE_INFINITY },
+      ellipse: { semiMajorAxis: 650, semiMinorAxis: 650, material: C.Color.fromCssColorString('#ff7a18').withAlpha(0.85), height: 10 },
+      point: { pixelSize: 40, color: C.Color.fromCssColorString('#fffceb'), disableDepthTestDistance: Number.POSITIVE_INFINITY },
     });
     const shock = v.entities.add({
       position: carto(IMPACT_SITE.lon, IMPACT_SITE.lat, IMPACT_SITE.height + 4),
       ellipse: {
-        semiMajorAxis: 120, semiMinorAxis: 120, height: 12,
+        semiMajorAxis: 150, semiMinorAxis: 150, height: 12,
         fill: false, outline: true,
-        outlineColor: C.Color.fromCssColorString('#ffd27a').withAlpha(0.9), outlineWidth: 4,
+        outlineColor: C.Color.fromCssColorString('#ffe6a6').withAlpha(0.95), outlineWidth: 6,
       },
     });
-    let r = 400, op = 0.75, sr = 120;
+    let r = 650, op = 0.85, sr = 150, fb = 1.0, tick = 0;
     const grow = setInterval(() => {
-      r += 240; op -= 0.05; sr += 520;
+      tick++;
+      r += 300; op -= 0.035; sr += 900; fb -= 0.08;   // slower fade → lasts longer
+      // flash billboard fades out quickly (first ~0.6s)
+      if (flashBillboard) {
+        try { flashBillboard.billboard.color = C.Color.WHITE.withAlpha(Math.max(0, fb)); } catch (_) {}
+      }
       if (op <= 0 || this._destroyed) {
         clearInterval(grow);
-        try { v.entities.remove(flash); v.entities.remove(shock); } catch (_) {}
+        try { v.entities.remove(flash); v.entities.remove(shock); if (flashBillboard) v.entities.remove(flashBillboard); } catch (_) {}
         return;
       }
       flash.ellipse.semiMajorAxis = r; flash.ellipse.semiMinorAxis = r;
       flash.ellipse.material = C.Color.fromCssColorString('#ff7a18').withAlpha(Math.max(0, op));
       shock.ellipse.semiMajorAxis = sr; shock.ellipse.semiMinorAxis = sr;
-      shock.ellipse.outlineColor = C.Color.fromCssColorString('#ffd27a').withAlpha(Math.max(0, op));
+      shock.ellipse.outlineColor = C.Color.fromCssColorString('#ffe6a6').withAlpha(Math.max(0, op));
     }, 60);
 
-    // (4–6) particle systems: fireball + smoke + debris
+    // (4–6) particle systems: fireball + smoke + debris (sprite PNGs)
     try { this._spawnImpactParticles(); } catch (e) { /* particles unsupported → flash/shock still play */ }
 
-    // (7) brief bloom boost so the blast glows, then restore (guarded)
+    // (7) stronger, temporary BLOOM boost so the blast glows, then restore (guarded)
     try {
       const bloom = v.scene.postProcessStages && v.scene.postProcessStages.bloom;
       if (bloom) {
         const prev = bloom.uniforms.brightness;
         bloom.enabled = true;
-        bloom.uniforms.brightness = 0.5;
-        setTimeout(() => { try { bloom.uniforms.brightness = this.thermal ? 0.25 : prev; } catch (_) {} }, 1400);
+        bloom.uniforms.brightness = 0.9;                 // brighter spike
+        setTimeout(() => { try { bloom.uniforms.brightness = this.thermal ? 0.25 : prev; } catch (_) {} }, 1800);
       }
     } catch (_) {}
   }
@@ -902,58 +954,82 @@ export default class CesiumScene {
     const pos = carto(IMPACT_SITE.lon, IMPACT_SITE.lat, IMPACT_SITE.height + 6);
     if (!validCartesian(pos)) return;
     const modelMatrix = C.Transforms.eastNorthUpToFixedFrame(pos);
-    const fireImg = radialSprite('rgba(255,244,190,1)', 'rgba(255,122,24,0.9)');
-    const smokeImg = radialSprite('rgba(90,90,90,0.9)', 'rgba(40,40,40,0.6)');
-    const debrisImg = radialSprite('rgba(60,40,24,1)', 'rgba(20,14,8,0.7)');
+    // FIX 2: prefer the committed transparent explosion sprite PNGs in public/.
+    // If a fetch/decode fails, Cesium falls back to the runtime radial sprite
+    // (passed as `image` only when the PNG is unavailable) so the blast never
+    // disappears. Paths are BASE_URL-relative so they resolve on any deploy root.
+    const base = (import.meta.env.BASE_URL || '/');
+    const fireImg  = `${base}explosion-fireball.png`;
+    const smokeImg = `${base}explosion-smoke.png`;
+    const debrisImg = `${base}explosion-debris.png`;
+    const fireFallback = radialSprite('rgba(255,244,190,1)', 'rgba(255,122,24,0.9)');
+    const smokeFallback = radialSprite('rgba(90,90,90,0.9)', 'rgba(40,40,40,0.6)');
+    const debrisFallback = radialSprite('rgba(60,40,24,1)', 'rgba(20,14,8,0.7)');
     const systems = [];
 
-    // fireball — fast, bright, short-lived, shrinking
-    if (fireImg) systems.push(new C.ParticleSystem({
+    // fireball — BIGGER + denser burst, brighter, lasts longer before settling
+    systems.push(new C.ParticleSystem({
       image: fireImg, modelMatrix,
-      startColor: C.Color.fromCssColorString('#fff2c0').withAlpha(0.95),
-      endColor: C.Color.fromCssColorString('#ff4d18').withAlpha(0.0),
-      startScale: 1.0, endScale: 5.0,
-      minimumParticleLife: 0.5, maximumParticleLife: 1.4,
-      minimumSpeed: 18, maximumSpeed: 55,
-      imageSize: new C.Cartesian2(48, 48),
-      emissionRate: 0, // burst only
-      bursts: [ new C.ParticleBurst({ time: 0.0, minimum: 140, maximum: 200 }) ],
-      lifetime: 1.6,
-      emitter: new C.SphereEmitter(6.0),
-    }));
-    // smoke — slower, rising, expanding, longer-lived
-    if (smokeImg) systems.push(new C.ParticleSystem({
-      image: smokeImg, modelMatrix,
-      startColor: C.Color.fromCssColorString('#3a3a3a').withAlpha(0.8),
-      endColor: C.Color.fromCssColorString('#1a1a1a').withAlpha(0.0),
-      startScale: 2.0, endScale: 12.0,
-      minimumParticleLife: 1.8, maximumParticleLife: 3.5,
-      minimumSpeed: 4, maximumSpeed: 14,
-      imageSize: new C.Cartesian2(64, 64),
-      emissionRate: 60,
-      lifetime: 2.2,
-      emitter: new C.CircleEmitter(8.0),
-    }));
-    // debris — fast scattered dark specks on ballistic arcs
-    if (debrisImg) systems.push(new C.ParticleSystem({
-      image: debrisImg, modelMatrix,
-      startColor: C.Color.fromCssColorString('#3c2818').withAlpha(1.0),
-      endColor: C.Color.fromCssColorString('#140e08').withAlpha(0.0),
-      startScale: 0.6, endScale: 0.2,
-      minimumParticleLife: 0.8, maximumParticleLife: 2.0,
-      minimumSpeed: 30, maximumSpeed: 80,
-      imageSize: new C.Cartesian2(10, 10),
+      startColor: C.Color.fromCssColorString('#fff6d0').withAlpha(1.0),
+      endColor: C.Color.fromCssColorString('#ff3a12').withAlpha(0.0),
+      startScale: 1.6, endScale: 9.0,                       // larger growth
+      minimumParticleLife: 0.9, maximumParticleLife: 2.4,   // longer life
+      minimumSpeed: 28, maximumSpeed: 95,                    // faster expansion
+      imageSize: new C.Cartesian2(90, 90),                   // bigger sprites
       emissionRate: 0,
-      bursts: [ new C.ParticleBurst({ time: 0.0, minimum: 60, maximum: 100 }) ],
-      lifetime: 2.0,
-      emitter: new C.ConeEmitter(C.Math.toRadians(55)),
+      bursts: [
+        new C.ParticleBurst({ time: 0.0, minimum: 320, maximum: 460 }),  // denser
+        new C.ParticleBurst({ time: 0.25, minimum: 120, maximum: 200 }),
+      ],
+      lifetime: 2.4,
+      emitter: new C.SphereEmitter(10.0),
+    }));
+    // smoke — large, billowing, rising, long-lived plume
+    systems.push(new C.ParticleSystem({
+      image: smokeImg, modelMatrix,
+      startColor: C.Color.fromCssColorString('#4a4a4d').withAlpha(0.9),
+      endColor: C.Color.fromCssColorString('#161618').withAlpha(0.0),
+      startScale: 3.0, endScale: 22.0,                       // huge plume
+      minimumParticleLife: 2.6, maximumParticleLife: 5.0,    // lingers
+      minimumSpeed: 6, maximumSpeed: 22,
+      imageSize: new C.Cartesian2(120, 120),
+      emissionRate: 140,                                     // much denser
+      lifetime: 3.4,
+      emitter: new C.CircleEmitter(12.0),
+    }));
+    // debris — many fast scattered embers on ballistic arcs
+    systems.push(new C.ParticleSystem({
+      image: debrisImg, modelMatrix,
+      startColor: C.Color.fromCssColorString('#ff7a2a').withAlpha(1.0),
+      endColor: C.Color.fromCssColorString('#140e08').withAlpha(0.0),
+      startScale: 1.0, endScale: 0.3,
+      minimumParticleLife: 1.0, maximumParticleLife: 2.6,
+      minimumSpeed: 45, maximumSpeed: 130,                   // flung further
+      imageSize: new C.Cartesian2(18, 18),
+      emissionRate: 0,
+      bursts: [ new C.ParticleBurst({ time: 0.0, minimum: 140, maximum: 220 }) ],
+      lifetime: 2.4,
+      emitter: new C.ConeEmitter(C.Math.toRadians(62)),
     }));
 
-    systems.forEach((s) => { try { scene.primitives.add(s); } catch (_) {} });
-    // auto-cleanup after the blast finishes
+    // If the PNG textures didn't decode, swap in the runtime radial fallbacks so
+    // the blast always renders (image can be reassigned before first render).
+    const fallbacks = [fireFallback, smokeFallback, debrisFallback];
+    systems.forEach((s, i) => {
+      try { scene.primitives.add(s); } catch (_) {}
+      // Cesium loads the image async; if it errors, fall back. Guarded.
+      try {
+        if (fallbacks[i]) {
+          const img = new Image();
+          img.onerror = () => { try { s.image = fallbacks[i]; } catch (_) {} };
+          img.src = [fireImg, smokeImg, debrisImg][i];
+        }
+      } catch (_) {}
+    });
+    // auto-cleanup after the (longer) blast finishes
     setTimeout(() => {
       systems.forEach((s) => { try { if (!s.isDestroyed || !s.isDestroyed()) scene.primitives.remove(s); } catch (_) {} });
-    }, 4200);
+    }, 6500);
   }
 
   readout() {
@@ -1030,7 +1106,16 @@ export default class CesiumScene {
   _setUserControls(enabled) {
     const cc = this._userControls;
     if (!cc) return;
-    if (cc.enableInputs === enabled) return;      // avoid per-frame churn
+    if (cc.enableInputs === enabled) return;      // avoid per-frame churn (transition only)
+    // FIX 1: the MOMENT the user regains control, drop any reference-frame lock
+    // (lookAtTransform / viewBoundingSphere leaves the camera bound to an ENU
+    // frame, which silently disables zoom-out). Resetting to IDENTITY here means
+    // free orbit + zoom always work the instant a scripted move ends — across
+    // all 8 modes — and the controller's min/max zoom distances apply globally.
+    if (enabled && this.viewer) {
+      try { this.viewer.camera.lookAtTransform(C.Matrix4.IDENTITY); } catch (_) {}
+      cc.enableZoom = true; cc.enableRotate = true; cc.enableTranslate = true; cc.enableTilt = true;
+    }
     cc.enableInputs = enabled;
   }
 
@@ -1329,6 +1414,7 @@ export default class CesiumScene {
   destroy() {
     this._destroyed = true;
     cancelAnimationFrame(this._rafId);                 // stop the single driver loop
+    try { if (this._impactHoldTimer) clearTimeout(this._impactHoldTimer); } catch (_) {}  // FIX 3: no dangling timer
     try { if (this._onResize) window.removeEventListener('resize', this._onResize); } catch (_) {}
     try { this._ro && this._ro.disconnect(); } catch (_) {}
     try { this.handler && this.handler.destroy(); } catch (_) {}

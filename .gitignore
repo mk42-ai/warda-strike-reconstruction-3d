@@ -1,9 +1,6 @@
 # dependencies
 node_modules/
 
-# build output
-dist/
-
 # vercel
 .vercel/
 
@@ -11,6 +8,8 @@ dist/
 *.log
 .DS_Store
 
-# deploy logs
+# deploy logs / build scripts (not part of the app)
 deploy_out.txt
 deploy_err.txt
+
+# NOTE: dist/ is intentionally COMMITTED for this deploy (rebuilt production bundle)
