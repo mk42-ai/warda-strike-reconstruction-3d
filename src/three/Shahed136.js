@@ -8,9 +8,18 @@
 import * as THREE from 'three';
 // DEFECT 1: image-based lighting for the inspector. RoomEnvironment + PMREM give
 // a prefiltered environment map so the drone's PBR materials get realistic
-// ambient reflections/fill (no flat or black faces). Imported from three's jsm
-// examples; both are pure-JS and bundle fine with Vite.
-import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
+// ambient reflections/fill (no flat or black faces). Imported from three-stdlib
+// (a maintained, Vite-friendly port of three's jsm examples).
+import { RoomEnvironment } from 'three-stdlib';
+// CINEMATIC POST-PROCESSING (pmndrs 'postprocessing'): a real EffectComposer
+// pipeline gives the drone inspector selective BLOOM (glowing wingtip accents,
+// warhead + EO seeker emissives), SMAA anti-aliasing, and ACES filmic tone
+// mapping — the same cinematic grade as the Cesium theatre. All guarded so a
+// weak GPU/context silently falls back to a plain renderer.render().
+import {
+  EffectComposer, RenderPass, EffectPass,
+  BloomEffect, SMAAEffect, ToneMappingEffect, ToneMappingMode, KernelSize,
+} from 'postprocessing';
 
 export function buildShahed136() {
   const group = new THREE.Group();
@@ -127,12 +136,17 @@ export function mountShahedInspector(container) {
   const w = container.clientWidth || 280;
   const h = container.clientHeight || 180;
 
-  const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+  // powerPreference high-performance + a stencil buffer so the postprocessing
+  // EffectComposer can run its SMAA/bloom passes. antialias:false because SMAA
+  // (in the composer) does the AA — stacking MSAA + SMAA just wastes fill-rate.
+  const renderer = new THREE.WebGLRenderer({ antialias: false, alpha: true, powerPreference: 'high-performance', stencil: false, depth: true });
   renderer.setPixelRatio(Math.min(2, window.devicePixelRatio || 1));
   renderer.setSize(w, h);
   // DEFECT 1: balanced tone mapping + correct color space (sRGB output) so the
   // PBR materials read with accurate colour and exposure (guarded for older
-  // three builds where the property name differs).
+  // three builds where the property name differs). NOTE: when the postprocessing
+  // composer is active, ACES tone mapping is applied by its ToneMappingEffect
+  // (renderer.toneMapping is set to NoToneMapping so it isn't applied twice).
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
   renderer.toneMappingExposure = 1.15;
   try {
@@ -186,13 +200,49 @@ export function mountShahedInspector(container) {
   disc.position.y = -1.2;
   scene.add(disc);
 
+  // ── CINEMATIC POST-PROCESSING PIPELINE (pmndrs 'postprocessing') ──────────
+  // EffectComposer → RenderPass → EffectPass[ Bloom + SMAA + ACES ToneMapping ].
+  // Bloom makes the emissive wingtip accents / warhead / EO seeker glow; SMAA
+  // gives clean edges; ToneMappingEffect applies ACES filmic in the composer.
+  // Fully guarded: if composer construction throws (weak GPU / no float RT), we
+  // null it out and the animate loop falls back to renderer.render().
+  let composer = null;
+  try {
+    composer = new EffectComposer(renderer);
+    composer.addPass(new RenderPass(scene, camera));
+
+    const bloom = new BloomEffect({
+      intensity: 1.15,               // strength of the glow
+      luminanceThreshold: 0.62,      // only bright/emissive pixels bloom
+      luminanceSmoothing: 0.32,
+      kernelSize: KernelSize.LARGE,  // soft, cinematic falloff
+      mipmapBlur: true,
+    });
+    const smaa = new SMAAEffect();
+    // ToneMappingEffect (ACES) in the composer → don't double-apply in renderer.
+    const aces = new ToneMappingEffect({ mode: ToneMappingMode.ACES_FILMIC });
+    try { renderer.toneMapping = THREE.NoToneMapping; } catch (_) {}
+
+    composer.addPass(new EffectPass(camera, smaa, bloom, aces));
+  } catch (e) {
+    composer = null;                 // fall back to a plain render
+    try { renderer.toneMapping = THREE.ACESFilmicToneMapping; } catch (_) {}
+    // eslint-disable-next-line no-console
+    console.warn('[Shahed inspector] postprocessing composer unavailable, using plain render:', e);
+  }
+
   let raf = 0;
   let t = 0;
+  const clock = new THREE.Clock();
   const animate = () => {
     t += 0.016;
+    const dt = clock.getDelta();
     model.rotation.y = t * 0.5;
     if (model.userData.prop) model.userData.prop.rotation.z += 0.9;
-    renderer.render(scene, camera);
+    // composer.render(dt) runs the bloom/SMAA/ACES chain; plain render is the
+    // guarded fallback so the inspector is NEVER blank on an unsupported GPU.
+    if (composer) { try { composer.render(dt); } catch (_) { renderer.render(scene, camera); } }
+    else renderer.render(scene, camera);
     raf = requestAnimationFrame(animate);
   };
   animate();
@@ -201,6 +251,7 @@ export function mountShahedInspector(container) {
     const nw = container.clientWidth || w;
     const nh = container.clientHeight || h;
     renderer.setSize(nw, nh);
+    if (composer) { try { composer.setSize(nw, nh); } catch (_) {} }
     camera.aspect = nw / nh;
     camera.updateProjectionMatrix();
   };
@@ -210,6 +261,7 @@ export function mountShahedInspector(container) {
     dispose() {
       cancelAnimationFrame(raf);
       window.removeEventListener('resize', onResize);
+      if (composer) { try { composer.dispose(); } catch (_) {} }
       renderer.dispose();
       if (renderer.domElement.parentNode) renderer.domElement.parentNode.removeChild(renderer.domElement);
     },

@@ -2,10 +2,22 @@
 //  CesiumScene — IMP-08 Warda strike 3D theatre + overwatch engine (pure Cesium)
 //  React drives it imperatively:
 //    setProgress(t01), setCamMode(id), gotoWaypoint(i), setThermal(on),
-//    setLayer(name,on), setIonToken(tok), setPlaying(b), onReady(cb), onPick(cb)
-//  Imagery: token-free ESRI World Imagery (real satellite) + ESRI World
-//  Elevation 3D terrain. Optional Cesium ion token → World Terrain + Google
-//  Photorealistic 3D Tiles auto-upgrade.
+//    setLayer(name,on), setImageryMode(mode), setPlaying(b), onReady(cb), onPick(cb)
+//
+//  ── VISUAL-REALISM UPGRADE (NO CESIUM ION TOKEN) ──────────────────────────
+//  Imagery  : LIVE, key-free ESRI World Imagery (real global satellite base) via
+//             ArcGisMapServerImageryProvider.fromUrl — with a token-free Carto
+//             "Dark Matter" alternate base (UrlTemplateImageryProvider) and a
+//             high-detail local Al-Warqa impact patch draped on top.
+//  Terrain  : LIVE, key-free ESRI World Terrain (ArcGISTiledElevationTerrain-
+//             Provider.fromUrl) with a graceful EllipsoidTerrainProvider fallback
+//             if the network/provider is unavailable at the venue.
+//  Cinematic: HDR + ACES tone mapping, bloom, screen-space ambient occlusion,
+//             FXAA + MSAAx4, sky/ground atmosphere, distance fog, sun-driven
+//             globe lighting and soft dynamic shadows.
+//  Perf     : capped resolutionScale, larger globe tileCacheSize, tuned
+//             maximumScreenSpaceError + maximumRenderTimeChange for smooth play.
+//  NO Cesium ion token, NO Google key, NO AI-generated image assets anywhere.
 // ============================================================================
 import * as Cesium from 'cesium';
 import {
@@ -88,7 +100,10 @@ export default class CesiumScene {
   constructor(container) {
     this.container = container;
     this._destroyed = false;
-    this.ionMode = 'free';
+    this.ionMode = 'free';          // retained for API compatibility; always 'free' (no Ion)
+    this.imageryMode = 'satellite'; // 'satellite' (ESRI World Imagery) | 'dark' (Carto Dark Matter)
+    this._baseLayers = {};          // { satellite, dark } live ImageryLayer handles
+    this._detailLayers = [];        // high-detail local overlays draped on top
     this.camMode = 'orbit';
     this.thermal = false;
     this.progress = 0;
@@ -237,15 +252,15 @@ export default class CesiumScene {
   }
 
   _initViewer() {
-    // STEP-3 3D backdrop (NO TOKEN): real photorealistic ground textures for the
-    // OFFLINE photorealistic backdrop from REAL server-side captured tiles
-    // (no client-side Cesium/Google key, no runtime ESRI/Cesium/Google tile
-    // request). The globe starts with no base layer; local captured PNGs are
-    // added below as georeferenced SingleTile imagery layers covering the
-    // Bandar Abbas → Dubai → Al Warqa corridor. Default ellipsoid terrain is
-    // used so nothing is fetched from the network at runtime.
+    // VISUAL-REALISM UPGRADE (NO CESIUM ION TOKEN): the globe now streams LIVE,
+    // key-free imagery + terrain at the venue (internet available). The base
+    // layer is real ESRI World Imagery (global satellite); a token-free Carto
+    // "Dark Matter" base is available as an alternate; and a high-detail local
+    // Al-Warqa impact patch is draped on top for the terminal-dive close-up.
+    // Terrain is live ESRI World Terrain with an ellipsoid fallback. NOTHING
+    // here needs a Cesium ion / Google key.
     this.viewer = new C.Viewer(this.container, {
-      baseLayer: false,
+      baseLayer: false,            // base layers are added explicitly in _addBaseImagery()
       baseLayerPicker: false, geocoder: false, homeButton: false,
       sceneModePicker: false, navigationHelpButton: false, animation: false,
       timeline: false, fullscreenButton: false, infoBox: false,
@@ -254,9 +269,28 @@ export default class CesiumScene {
       contextOptions: { webgl: { alpha: false, antialias: true, powerPreference: 'high-performance' } },
     });
     this.viewer._cesiumWidget._creditContainer.style.display = 'none';
-    this._addCapturedImagery();
+    this._addBaseImagery();          // LIVE ESRI World Imagery + Carto Dark + local detail patch
+    this._loadTerrain();             // LIVE ESRI World Terrain → ellipsoid fallback (no Ion)
 
     const scene = this.viewer.scene;
+
+    // -- PERFORMANCE: smooth playback tuning (no Ion) --------------------------
+    // Cap the render resolution to the device pixel ratio (≤2×) so high-DPI
+    // panels stay sharp without paying a 3-4× fill-rate cost during the strike.
+    try { this.viewer.resolutionScale = Math.min(window.devicePixelRatio || 1, 2.0); } catch (_) {}
+    // Bigger globe tile cache → far fewer imagery/terrain reloads while the
+    // camera sweeps the whole Iran→Dubai corridor (default is 100).
+    try { scene.globe.tileCacheSize = 1000; } catch (_) {}
+    // requestRenderMode: this scene owns a continuous rAF driver loop (playback +
+    // camera smoothing), so CONTINUOUS rendering is the correct mode for glitch-
+    // free animation — but we still tune maximumRenderTimeChange so that while
+    // idle (paused, no camera motion) Cesium coalesces frames instead of busy-
+    // spinning the GPU. During Play, setPlaying() forces requestRenderMode=false
+    // + maximumRenderTimeChange=Infinity so nothing throttles the strike.
+    try {
+      scene.requestRenderMode = false;              // continuous during the animated theatre
+      scene.maximumRenderTimeChange = 1.0;          // idle-frame coalescing budget (s)
+    } catch (_) {}
 
     // -- render-error AUTO-RECOVERY (safety net) -------------------------------
     // Cesium catches per-frame render exceptions, raises scene.renderError and
@@ -274,8 +308,14 @@ export default class CesiumScene {
         console.warn('[CesiumScene] renderError — disabling post-processing and recovering:', err);
         try {
           const pp = scene.postProcessStages;
-          if (pp) { if (pp.bloom) pp.bloom.enabled = false; if (pp.fxaa) pp.fxaa.enabled = false; pp.removeAll && pp.removeAll(); }
+          if (pp) {
+            if (pp.bloom) pp.bloom.enabled = false;
+            if (pp.fxaa) pp.fxaa.enabled = false;
+            if (pp.ambientOcclusion) pp.ambientOcclusion.enabled = false;   // AO off on recovery
+            pp.removeAll && pp.removeAll();
+          }
         } catch (_) {}
+        try { if (scene.shadowMap) scene.shadowMap.softShadows = false; } catch (_) {}
         try { scene.highDynamicRange = false; } catch (_) {}
         try { scene.msaaSamples = 1; } catch (_) {}
         try { scene.requestRender(); } catch (_) {}
@@ -366,6 +406,44 @@ export default class CesiumScene {
       }
     } catch (_) { /* bloom unavailable on this GPU → skip glow */ }
 
+    // -- SCREEN-SPACE AMBIENT OCCLUSION (SSAO) --------------------------------
+    // Cesium ships an ambient-occlusion post-process stage that darkens creases
+    // and where geometry meets the ground — it grounds the buildings/drone and
+    // adds cinematic contact shadowing. It needs a depth texture, so it is
+    // FEATURE-DETECTED + guarded (no-ops on GPUs/contexts without depth support,
+    // exactly like the bloom/silhouette stages) and is disabled on renderError.
+    try {
+      const ao = scene.postProcessStages && scene.postProcessStages.ambientOcclusion;
+      if (ao) {
+        ao.enabled = true;
+        if (ao.uniforms) {
+          ao.uniforms.intensity = 3.2;         // strength of the darkening
+          ao.uniforms.bias = 0.1;              // avoid self-occlusion acne
+          ao.uniforms.lengthCap = 0.28;        // max world-space sample radius
+          ao.uniforms.stepSize = 1.9;
+          ao.uniforms.blurStepSize = 0.86;     // soften the AO term
+        }
+      }
+    } catch (_) { /* AO unsupported on this GPU → skip contact shadowing */ }
+
+    // -- DYNAMIC SOFT SHADOWS --------------------------------------------------
+    // The viewer was created with shadows:true; here we tune the shadow map for
+    // presentation-grade SOFT shadows (PCF), a larger map for crisp edges, and a
+    // sun-driven light source so the drone + buildings cast real shadows across
+    // the corridor. All guarded so a weak GPU simply keeps hard/again-safe shadows.
+    try {
+      const sm = scene.shadowMap;
+      if (sm) {
+        sm.enabled = true;
+        sm.softShadows = true;                 // PCF soft-shadow filtering
+        sm.size = 2048;                        // sharper shadow edges (was default 2048/1024)
+        sm.darkness = 0.34;                    // how dark the shadowed areas read
+        sm.maximumDistance = 8000.0;           // shadow range around the focus
+        if ('normalOffset' in sm) sm.normalOffset = true;
+        if ('fadingEnabled' in sm) sm.fadingEnabled = true;
+      }
+    } catch (_) { /* shadow map tuning unsupported → viewer default shadows */ }
+
     // edge-sharpening post-process: crisp building/tile silhouettes on top of
     // MSAA+FXAA (subtle, presentation-grade — not a hard outline).
     //
@@ -448,9 +526,10 @@ export default class CesiumScene {
       }
     } catch (_) { /* keep default clock/lighting if anything is unavailable */ }
 
-    // Terrain: default smooth ellipsoid (no network fetch). Relief is conveyed
-    // by the 3D-photorealistic captured tiles draped as imagery; an optional
-    // Cesium ion token can still upgrade to World Terrain via setIonToken().
+    // Terrain: LIVE, key-free ESRI World Terrain is loaded asynchronously in
+    // _loadTerrain() (called from _initViewer) with an EllipsoidTerrainProvider
+    // fallback if the network/provider is unavailable at the venue. No Cesium
+    // ion token is used anywhere.
     this.flyOverview(0);
   }
 
@@ -476,39 +555,120 @@ export default class CesiumScene {
     } catch (_) { /* never let a lighting refresh break a mode switch */ }
   }
 
-  // Drape the REAL captured satellite/3D tiles as georeferenced local imagery
-  // layers (offline). Each capture is centered on its lat/lon with a small
-  // rectangle so the corridor reads as photorealistic ground without any
-  // external tile request.
-  _addCapturedImagery() {
+  // Shared imagery-layer polish: crisp linear filtering + a touch of contrast /
+  // saturation so both the live satellite base and the local detail patch read
+  // sharp and cinematic. Guarded so an unsupported prop never breaks the load.
+  _tuneImageryLayer(layer, opts = {}) {
+    try {
+      layer.magnificationFilter = C.TextureMagnificationFilter.LINEAR;
+      layer.minificationFilter = C.TextureMinificationFilter.LINEAR;
+      if (opts.contrast != null) layer.contrast = opts.contrast;
+      if (opts.saturation != null) layer.saturation = opts.saturation;
+      if (opts.gamma != null) layer.gamma = opts.gamma;
+      if (opts.brightness != null) layer.brightness = opts.brightness;
+    } catch (_) {}
+    return layer;
+  }
+
+  // ── LIVE base imagery (NO CESIUM ION TOKEN) ───────────────────────────────
+  // Real ESRI World Imagery global satellite base (key-free public MapServer) +
+  // a token-free Carto "Dark Matter" alternate base + a high-detail local
+  // Al-Warqa impact patch draped on top for the terminal-dive close-up. React
+  // switches the active base via setImageryMode('satellite' | 'dark').
+  _addBaseImagery() {
     const layers = this.viewer.imageryLayers;
-    const add = (file, lonC, latC, halfDeg, alpha) => {
-      try {
-        const rect = C.Rectangle.fromDegrees(lonC - halfDeg, latC - halfDeg, lonC + halfDeg, latC + halfDeg);
-        const prov = new C.SingleTileImageryProvider({ url: file, rectangle: rect, tileWidth: 256, tileHeight: 256 });
-        const layer = layers.addImageryProvider(prov);
-        if (alpha != null) layer.alpha = alpha;
-        // crisp ground texture: linear min/mag filtering + a touch of contrast
-        // & saturation so the captured satellite tiles read sharp and realistic.
-        try {
-          layer.magnificationFilter = C.TextureMagnificationFilter.LINEAR;
-          layer.minificationFilter = C.TextureMinificationFilter.LINEAR;
-          layer.contrast = 1.06;
-          layer.saturation = 1.08;
-          layer.gamma = 1.02;
-          layer.brightness = 1.02;
-        } catch (_) {}
-        return layer;
-      } catch (e) { return null; }
-    };
-    const B = IMAGERY.backdrop || {};
-    // wide Dubai overview ground texture near the impact cluster
-    add(B.groundOverlay || '/imagery/dubai-2d.png', 55.2708, 25.2048, 0.45, 1.0);
-    // launch area (Bandar Abbas) + corridor midpoint relief panels
-    add(B.launchArea || '/imagery/bandar-abbas-3d.png', 56.2893, 27.1842, 0.30, 0.95);
-    add(B.corridorMid || '/imagery/gulf-midpoint-3d.png', 55.8469, 26.185, 0.30, 0.95);
-    // high-detail Al Warqa impact-site capture on top (2D satellite footprint)
-    add('/imagery/alwarqa-2d.png', 55.4045, 25.1858, 0.06, 1.0);
+
+    // (1) ESRI World Imagery — real global satellite, NO KEY. This is exactly the
+    //     public REST MapServer endpoint requested for the scene. fromProviderAsync
+    //     returns the layer synchronously and resolves the provider in the
+    //     background, so init never blocks or throws on a slow network.
+    try {
+      const esri = C.ImageryLayer.fromProviderAsync(
+        C.ArcGisMapServerImageryProvider.fromUrl(
+          'https://services.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer',
+          { enablePickFeatures: false }
+        ),
+        {}
+      );
+      this._tuneImageryLayer(esri, { contrast: 1.06, saturation: 1.10, gamma: 1.02, brightness: 1.02 });
+      layers.add(esri);
+      this._baseLayers.satellite = esri;
+    } catch (_) { /* Carto + detail patch below still give a usable base */ }
+
+    // (2) Carto "Dark Matter" — token-free tactical dark basemap (alternate).
+    //     Added hidden; setImageryMode('dark') reveals it and hides satellite.
+    try {
+      const carto = new C.ImageryLayer(
+        new C.UrlTemplateImageryProvider({
+          url: 'https://a.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png',
+          subdomains: ['a', 'b', 'c', 'd'],
+          maximumLevel: 20,
+          credit: '© OpenStreetMap contributors © CARTO',
+        })
+      );
+      carto.show = false;
+      this._tuneImageryLayer(carto, { contrast: 1.12, saturation: 0.92, gamma: 1.0, brightness: 1.02 });
+      layers.add(carto);
+      this._baseLayers.dark = carto;
+    } catch (_) { /* satellite base still active */ }
+
+    // (3) High-detail LOCAL Al-Warqa impact patch draped on top of the live base
+    //     for the terminal-dive close-up (a real committed satellite capture —
+    //     NOT AI-generated). SingleTileImageryProvider.fromUrl (the constructor
+    //     is deprecated in Cesium 1.122) → wrapped in fromProviderAsync.
+    this._addDetailPatch('/imagery/alwarqa-2d.png', 55.4045, 25.1858, 0.06, 1.0);
+  }
+
+  // Drape one high-detail local capture as a georeferenced imagery layer on top
+  // of the live base (used for the impact-site close-up). Fully guarded.
+  _addDetailPatch(file, lonC, latC, halfDeg, alpha) {
+    try {
+      const rect = C.Rectangle.fromDegrees(lonC - halfDeg, latC - halfDeg, lonC + halfDeg, latC + halfDeg);
+      const layer = C.ImageryLayer.fromProviderAsync(
+        C.SingleTileImageryProvider.fromUrl(file, { rectangle: rect, tileWidth: 256, tileHeight: 256 }),
+        {}
+      );
+      if (alpha != null) layer.alpha = alpha;
+      this._tuneImageryLayer(layer, { contrast: 1.06, saturation: 1.08, gamma: 1.02, brightness: 1.02 });
+      this.viewer.imageryLayers.add(layer);
+      this._detailLayers.push(layer);
+      return layer;
+    } catch (_) { return null; }
+  }
+
+  // ── LIVE terrain (NO CESIUM ION TOKEN) ────────────────────────────────────
+  // Real ESRI World Terrain (key-free WorldElevation3D/Terrain3D ImageServer)
+  // with a graceful EllipsoidTerrainProvider fallback if the provider/network is
+  // unavailable at the venue. Async so init never blocks on the network; the
+  // scene runs immediately on the ellipsoid and swaps to 3D terrain when ready.
+  async _loadTerrain() {
+    try {
+      const terrain = await C.ArcGISTiledElevationTerrainProvider.fromUrl(
+        'https://elevation3d.arcgis.com/arcgis/rest/services/WorldElevation3D/Terrain3D/ImageServer'
+      );
+      if (this._destroyed || !this.viewer) return;
+      this.viewer.terrainProvider = terrain;
+      this.terrainMode = 'esri-world-terrain';
+      try { this.viewer.scene.requestRender(); } catch (_) {}
+    } catch (_) {
+      // key-free venue fallback: smooth ellipsoid (no network) — scene still runs
+      try { if (this.viewer) this.viewer.terrainProvider = new C.EllipsoidTerrainProvider(); } catch (__) {}
+      this.terrainMode = 'ellipsoid-fallback';
+    }
+  }
+
+  // Switch the active LIVE base imagery: 'satellite' (ESRI World Imagery) or
+  // 'dark' (Carto Dark Matter). The local Al-Warqa detail patch stays on top in
+  // both modes. Replaces the old Cesium-ion upgrade path (no token anywhere).
+  setImageryMode(mode) {
+    const m = mode === 'dark' ? 'dark' : 'satellite';
+    this.imageryMode = m;
+    try {
+      if (this._baseLayers.satellite) this._baseLayers.satellite.show = (m === 'satellite');
+      if (this._baseLayers.dark) this._baseLayers.dark.show = (m === 'dark');
+      this.viewer.scene.requestRender();
+    } catch (_) {}
+    return { ok: true, mode: m };
   }
 
   flyOverview(d = 2.2) {
@@ -757,8 +917,16 @@ export default class CesiumScene {
   }
 
   imageryAlpha(a) {
-    const layers = this.viewer.imageryLayers;
-    if (layers.length) layers.get(0).alpha = a;
+    // Dim the ACTIVE live base (satellite or dark) + the local detail patch so
+    // thermal mode reads as an IR overlay regardless of which base is showing.
+    try {
+      const active = this._baseLayers[this.imageryMode] || this._baseLayers.satellite;
+      if (active) active.alpha = a;
+      this._detailLayers.forEach((l) => { try { l.alpha = a; } catch (_) {} });
+    } catch (_) {
+      const layers = this.viewer.imageryLayers;   // defensive fallback
+      if (layers.length) layers.get(0).alpha = a;
+    }
   }
 
   // -- progress / animation update -------------------------------------------
@@ -1368,35 +1536,13 @@ export default class CesiumScene {
     return ts;
   }
 
-  // -- optional Ion upgrade: World Terrain + Google Photoreal 3D Tiles --------
-  async setIonToken(token) {
-    if (!token) return { ok: false, msg: 'empty token' };
-    try {
-      C.Ion.defaultAccessToken = token;
-      this.ionMode = 'ion';
-      const terrain = await C.createWorldTerrainAsync({ requestVertexNormals: true, requestWaterMask: true });
-      if (this._destroyed) return { ok: false };
-      this.viewer.terrainProvider = terrain;
-      try {
-        const photoreal = await C.createGooglePhotorealistic3DTileset();
-        if (this._destroyed) return { ok: false };
-        this._tuneTileset(photoreal);                 // realism tuning (Task B)
-        this.viewer.scene.primitives.add(photoreal);
-        this._photoreal = photoreal;
-        return { ok: true, msg: 'Google Photorealistic 3D Tiles + World Terrain active' };
-      } catch (e) {
-        try {
-          const osm = await C.createOsmBuildingsAsync();
-          this._tuneTileset(osm);
-          this.viewer.scene.primitives.add(osm);
-          return { ok: true, msg: 'World Terrain + OSM Buildings active (Google tiles unavailable on this token)' };
-        } catch (_) { return { ok: true, msg: 'World Terrain active' }; }
-      }
-    } catch (e) {
-      this.ionMode = 'free';
-      return { ok: false, msg: 'Invalid Ion token: ' + (e?.message || e) };
-    }
-  }
+  // -- (removed) Cesium ion token upgrade ------------------------------------
+  // The optional Cesium-ion path (World Terrain + Google Photorealistic 3D
+  // Tiles) has been REMOVED per the no-Ion-token requirement. Live, key-free
+  // ESRI World Imagery + ESRI World Terrain are now loaded by default in
+  // _addBaseImagery()/_loadTerrain(), and base-map switching is handled by
+  // setImageryMode('satellite' | 'dark'). No Cesium.Ion API is referenced
+  // anywhere in this module.
 
   _installPick() {
     this.handler = new C.ScreenSpaceEventHandler(this.viewer.scene.canvas);

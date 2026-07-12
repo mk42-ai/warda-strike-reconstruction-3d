@@ -10,6 +10,16 @@ import {
   LOGO, HUD_FRAME, CAM_ICONS, GEOFENCE_RING, THERMAL_ALERT, waypointMarker,
 } from './brand/assets.js';
 
+// AIREV | OnDemand wordmark — rendered PURELY as styled text/CSS (no image
+// asset, no AI-generated graphic). Used in the classification banner + footer.
+const AirevWordmark = ({ className }) => (
+  <span className={`airev-wordmark ${className || ''}`}>
+    <span className="aw-airev">AIREV</span>
+    <span className="aw-sep">|</span>
+    <span className="aw-ond">OnDemand</span>
+  </span>
+);
+
 const Svg = ({ markup, className, style }) => (
   <span className={className} style={style} dangerouslySetInnerHTML={{ __html: markup }} />
 );
@@ -27,8 +37,8 @@ export default function App() {
   const [activeWp, setActiveWp] = useState(0);
   const [readout, setReadout] = useState(null);
   const [picked, setPicked] = useState(null);
-  const [ionToken, setIonToken] = useState('');
-  const [ionMsg, setIonMsg] = useState('');
+  const [imageryMode, setImageryMode] = useState('satellite');   // 'satellite' (ESRI) | 'dark' (Carto)
+  const [clock, setClock] = useState('');                        // live UTC clock for the classification banner
   const [layers, setLayers] = useState({ corridor: true, geofence: true, waypoints: true });
 
   const thermalReport = analyzeThermal(VIIRS_DETECTIONS);
@@ -111,12 +121,24 @@ export default function App() {
     if (r) { setReadout(r); setProgress(r.progress); }
   }, []);
 
-  const applyIon = useCallback(async () => {
-    if (!ionToken.trim()) return;
-    setIonMsg('Activating Cesium ion / Google Photorealistic 3D Tiles…');
-    const res = await sceneRef.current?.setIonToken(ionToken.trim());
-    setIonMsg(res?.msg || (res?.ok ? 'Active' : 'Failed'));
-  }, [ionToken]);
+  // Live base-imagery switch (LIVE ESRI World Imagery ↔ Carto Dark Matter) —
+  // replaces the removed Cesium-ion token path. No credentials required.
+  const pickImagery = useCallback((mode) => {
+    setImageryMode(mode);
+    sceneRef.current?.setImageryMode(mode);
+  }, []);
+
+  // Live UTC clock for the classification banner (Zulu time, MoD convention).
+  useEffect(() => {
+    const tick = () => {
+      const d = new Date();
+      const p = (n) => String(n).padStart(2, '0');
+      setClock(`${p(d.getUTCHours())}:${p(d.getUTCMinutes())}:${p(d.getUTCSeconds())}Z`);
+    };
+    tick();
+    const id = setInterval(tick, 1000);
+    return () => clearInterval(id);
+  }, []);
 
   const toggleLayer = (name) => {
     const on = !layers[name];
@@ -129,6 +151,18 @@ export default function App() {
 
   return (
     <div className="app">
+      {/* classification-style top banner (MoD presentation grade) */}
+      <div className="classbar" role="banner">
+        <span className="cls-tag">UNCLASSIFIED // FOR BRIEFING &amp; SIMULATION</span>
+        <span className="cls-mid">
+          <AirevWordmark /> <span className="cls-sys">SENTINEL OVERWATCH · IMP-08</span>
+        </span>
+        <span className="cls-tag cls-right">
+          <span className="cls-live"><span className="cls-dot" />{ready ? 'LIVE' : 'INIT'}</span>
+          <span className="cls-clock">{clock}</span>
+        </span>
+      </div>
+
       {/* full-screen brand HUD frame */}
       <Svg markup={HUD_FRAME} className="hud-frame" />
 
@@ -263,13 +297,19 @@ export default function App() {
         </div>
 
         <div className="panel">
-          <div className="panel-h">PHOTOREAL UPGRADE (OPTIONAL)</div>
-          <div className="muted small">Running on real ESRI World Imagery satellite tiles (no key). Paste a Cesium ion token to drape Google Photorealistic 3D Tiles.</div>
-          <div className="ion-row">
-            <input className="ion-in" type="password" placeholder="Cesium ion token…" value={ionToken} onChange={(e) => setIonToken(e.target.value)} />
-            <button className="ion-go" onClick={applyIon}>Apply</button>
+          <div className="panel-h">MAP LAYERS · LIVE / NO-KEY</div>
+          <div className="seg">
+            <button className={`seg-btn ${imageryMode === 'satellite' ? 'on' : ''}`} onClick={() => pickImagery('satellite')}>
+              SATELLITE
+            </button>
+            <button className={`seg-btn ${imageryMode === 'dark' ? 'on' : ''}`} onClick={() => pickImagery('dark')}>
+              TACTICAL DARK
+            </button>
           </div>
-          {ionMsg && <div className="muted small ion-msg">{ionMsg}</div>}
+          <div className="kv"><span>Base imagery</span><b>{imageryMode === 'dark' ? 'Carto Dark Matter' : 'ESRI World Imagery'}</b></div>
+          <div className="kv"><span>Terrain</span><b>ESRI World Terrain 3D</b></div>
+          <div className="kv"><span>Ion token</span><b className="ok-chip">NOT REQUIRED</b></div>
+          <div className="muted small">Live, key-free satellite &amp; terrain streamed at the venue. Toggle a tactical dark basemap for low-light briefing. No Cesium ion / Google credentials.</div>
         </div>
       </aside>
 
@@ -311,7 +351,9 @@ export default function App() {
         </div>
       )}
 
-      <div className="footer-brand">OnDemand Vision-Drone Overwatch · Sentinel</div>
+      <div className="footer-brand">
+        <AirevWordmark /> <span className="fb-sub">Vision-Drone Overwatch · Sentinel</span>
+      </div>
     </div>
   );
 }
