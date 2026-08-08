@@ -1,0 +1,175 @@
+{
+  "$schema": "./assetManifest.schema.md",
+  "manifestVersion": "1.0.0",
+  "generatedAtUtc": "2026-08-08T11:42:15Z",
+  "coordinateSystem": "WGS84 (EPSG:4326); heights are metres above the WGS84 ellipsoid/terrain",
+  "units": "metres, degrees",
+  "disclaimer": "MODELLED RECONSTRUCTION - NOT CONFIRMED INTELLIGENCE. Every asset below is proxy geometry generated procedurally; dimensions marked 'assumption' or 'unknown' are analytic estimates, not measurements.",
+  "assets": [
+    {
+      "id": "warda-apartments",
+      "name": "Jenna Apartments (Warda) residential block",
+      "file": "models/warda-apartments.glb",
+      "bytes": 3384,
+      "sha256": "097bf34487a85a99b294dd88c5a890e369eac346780eb12dce849107bf5586f3",
+      "dimensionsM": {
+        "length": 38.3,
+        "width": 22.3,
+        "height": 16.5
+      },
+      "position": {
+        "lon": 55.4045442,
+        "lat": 25.1857908,
+        "height": 0.0
+      },
+      "orientationDeg": {
+        "heading": 18.0,
+        "pitch": 0.0,
+        "roll": 0.0
+      },
+      "scale": 1.0,
+      "minimumPixelSize": 0,
+      "provenance": {
+        "origin": "procedurally generated proxy (Blender MCP bridge unreachable this session)",
+        "generationMethod": "python trimesh 5.0.0 -> glTF 2.0 binary (GLB), +Y up, PBR metallic-roughness",
+        "generatedAtUtc": "2026-08-08T11:42:15Z",
+        "confidence": "assumption",
+        "isProxyGeometry": true,
+        "swapInstructions": "Replace public/models/warda-apartments.glb with the Blender GLB export of the same name, keep the id, then update dimensionsM/sha256/confidence.",
+        "note": "Footprint/height are a MODELLED PROXY massing consistent with a G+4 Al Warqa residential block. Coordinates are the geocoded impact point (verified); building envelope is NOT survey-derived."
+      }
+    },
+    {
+      "id": "impact-crater",
+      "name": "Terminal-dive impact crater",
+      "file": "models/impact-crater.glb",
+      "bytes": 12900,
+      "sha256": "b40ecd925d743a51c94d1843439577f81d38f903b129bbb9c26b7703aa2de978",
+      "dimensionsM": {
+        "length": 9.0,
+        "width": 9.0,
+        "height": 2.25
+      },
+      "position": {
+        "lon": 55.4045442,
+        "lat": 25.1857908,
+        "height": 0.0
+      },
+      "orientationDeg": {
+        "heading": 0.0,
+        "pitch": 0.0,
+        "roll": 0.0
+      },
+      "scale": 1.0,
+      "minimumPixelSize": 0,
+      "provenance": {
+        "origin": "procedurally generated proxy (Blender MCP bridge unreachable this session)",
+        "generationMethod": "python trimesh 5.0.0 -> glTF 2.0 binary (GLB), +Y up, PBR metallic-roughness",
+        "generatedAtUtc": "2026-08-08T11:42:15Z",
+        "confidence": "assumption",
+        "isProxyGeometry": true,
+        "swapInstructions": "Replace public/models/impact-crater.glb with the Blender GLB export of the same name, keep the id, then update dimensionsM/sha256/confidence.",
+        "note": "Crater diameter/depth are a modelled proxy for a ~50 kg-class OWA warhead on a reinforced-concrete deck. No BDA measurement available."
+      }
+    },
+    {
+      "id": "debris-field",
+      "name": "Ejecta / debris field",
+      "file": "models/debris-field.glb",
+      "bytes": 13736,
+      "sha256": "ac236f4128253250114888cc529fd040d40b406d8dd629c543e68abad57e6be5",
+      "dimensionsM": {
+        "length": 50.18,
+        "width": 43.65,
+        "height": 0.69
+      },
+      "position": {
+        "lon": 55.4045442,
+        "lat": 25.1857908,
+        "height": 0.0
+      },
+      "orientationDeg": {
+        "heading": 0.0,
+        "pitch": 0.0,
+        "roll": 0.0
+      },
+      "scale": 1.0,
+      "minimumPixelSize": 0,
+      "provenance": {
+        "origin": "procedurally generated proxy (Blender MCP bridge unreachable this session)",
+        "generationMethod": "python trimesh 5.0.0 -> glTF 2.0 binary (GLB), +Y up, PBR metallic-roughness",
+        "generatedAtUtc": "2026-08-08T11:42:15Z",
+        "confidence": "unknown",
+        "isProxyGeometry": true,
+        "swapInstructions": "Replace public/models/debris-field.glb with the Blender GLB export of the same name, keep the id, then update dimensionsM/sha256/confidence.",
+        "note": "Deterministic pseudo-random ejecta scatter (seed 20260622). Illustrative only; distribution is NOT evidence-derived."
+      }
+    },
+    {
+      "id": "launch-pad",
+      "name": "Bandar Abbas launch rail + apron",
+      "file": "models/launch-pad.glb",
+      "bytes": 2404,
+      "sha256": "4020ecd3c4940b751f4322a30143db6d1405f47bb6bbcf6afb1b69aee8ef44ac",
+      "dimensionsM": {
+        "length": 14.0,
+        "width": 6.0,
+        "height": 3.53
+      },
+      "position": {
+        "lon": 56.2892533,
+        "lat": 27.1842023,
+        "height": 0.0
+      },
+      "orientationDeg": {
+        "heading": 222.0,
+        "pitch": 0.0,
+        "roll": 0.0
+      },
+      "scale": 1.0,
+      "minimumPixelSize": 0,
+      "provenance": {
+        "origin": "procedurally generated proxy (Blender MCP bridge unreachable this session)",
+        "generationMethod": "python trimesh 5.0.0 -> glTF 2.0 binary (GLB), +Y up, PBR metallic-roughness",
+        "generatedAtUtc": "2026-08-08T11:42:15Z",
+        "confidence": "assumption",
+        "isProxyGeometry": true,
+        "swapInstructions": "Replace public/models/launch-pad.glb with the Blender GLB export of the same name, keep the id, then update dimensionsM/sha256/confidence.",
+        "note": "Generic Shahed-136-class launch rail proxy at the resolved staging origin. Rail elevation ~18 deg; heading 222 deg aligns to the great-circle bearing toward Dubai. Site layout NOT confirmed."
+      }
+    },
+    {
+      "id": "sensor-mast",
+      "name": "Overwatch EO/IR sensor mast",
+      "file": "models/sensor-mast.glb",
+      "bytes": 7204,
+      "sha256": "a44d2ff4d91773e7bd9a9b651c80b421abc1c058c89928db85f6a01e8c9824f8",
+      "dimensionsM": {
+        "length": 1.8,
+        "width": 1.8,
+        "height": 11.3
+      },
+      "position": {
+        "lon": 55.51106,
+        "lat": 25.453046,
+        "height": 0.0
+      },
+      "orientationDeg": {
+        "heading": 200.0,
+        "pitch": 0.0,
+        "roll": 0.0
+      },
+      "scale": 1.0,
+      "minimumPixelSize": 0,
+      "provenance": {
+        "origin": "procedurally generated proxy (Blender MCP bridge unreachable this session)",
+        "generationMethod": "python trimesh 5.0.0 -> glTF 2.0 binary (GLB), +Y up, PBR metallic-roughness",
+        "generatedAtUtc": "2026-08-08T11:42:15Z",
+        "confidence": "unknown",
+        "isProxyGeometry": true,
+        "swapInstructions": "Replace public/models/sensor-mast.glb with the Blender GLB export of the same name, keep the id, then update dimensionsM/sha256/confidence.",
+        "note": "Notional overwatch mast placed at the corridor-origin reference to visualise the geofence tripwire. No such installation is asserted to exist."
+      }
+    }
+  ]
+}
