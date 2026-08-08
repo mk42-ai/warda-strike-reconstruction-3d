@@ -1,13 +1,16 @@
 {
   "name": "warda-strike-reconstruction-3d",
   "private": true,
-  "version": "2.0.0",
+  "version": "2.1.0",
   "type": "module",
   "description": "High-fidelity CesiumJS + Three.js 3D reconstruction of the IMP-08 Iran→Dubai (Warda Apartments) Shahed-136 strike, with real satellite imagery, full launch→impact trajectory, 8 camera modes, VIIRS-driven thermal/IR overwatch and an endurance-derived geofence. OnDemand Vision-Drone overwatch edition.",
   "scripts": {
     "dev": "vite --host 0.0.0.0 --port 5173",
     "build": "vite build",
-    "preview": "vite preview --host 0.0.0.0 --port 5173"
+    "preview": "vite preview --host 0.0.0.0 --port 5173",
+    "test": "node scripts/smoke-test.mjs",
+    "cad:import": "node scripts/cad-import.mjs",
+    "cad:import:merge": "node scripts/cad-import.mjs --merge"
   },
   "dependencies": {
     "cannon-es": "0.20.0",

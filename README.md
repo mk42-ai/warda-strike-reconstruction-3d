@@ -10,6 +10,10 @@ This is a clear visual/functional upgrade of the earlier
 launch→impact corridor with real-imagery, real VIIRS thermal data, and the
 OnDemand Vision-Drone overwatch brand system.
 
+**Current version: v2.1.0** — build-script refactor with versioning support,
+an optional guarded CAD/asset import pipeline, and a docs/CHANGELOG overhaul.
+See [CHANGELOG.md](CHANGELOG.md).
+
 ## Real satellite imagery (no key required)
 
 The globe is draped with **real high-resolution satellite imagery**:
@@ -43,8 +47,17 @@ Photorealistic 3D Tiles** + **Cesium World Terrain** over the same scene.
 ```bash
 npm install
 npm run dev      # http://localhost:5173
-npm run build    # production build → dist/
+npm run build    # production build → dist/ (also writes dist/build-info.json)
 npm run preview  # serve the built dist/
+npm test         # release smoke test — run AFTER npm run build
+```
+
+Optional CAD/asset import (dev-time only, never required for the build):
+
+```bash
+mkdir -p cad-inbox && cp /path/to/model.step cad-inbox/   # or .iges/.obj/.glb
+npm run cad:import          # convert/validate → public/models/imported/ + report
+npm run cad:import:merge -- --at 55.4045442,25.1857908,0   # also append to the asset manifest
 ```
 
 ## Data provenance
@@ -65,8 +78,79 @@ src/
   data/scenario.js        Corridor, endpoints, geofence, VIIRS data + thermal analysis
   utils/geo.js            Great-circle / path / interpolation helpers
   brand/assets.js         OnDemand SVG asset set (logo, frame, icons, markers)
+  assets/assetManifest.json   Declarative GLB manifest (ids, georeferencing, sha256, provenance tiers)
+  assets/assetManifest.ts     Typed wrapper + runtime validator for the manifest
+  config/lightingConfig.ts    HDR lighting/post-processing configuration
+  scene/loadAssetsFromManifest.ts  Manifest GLB loader (retry + error classification + extraAssets hook)
+  scene/applyLighting.ts      Shared image-based lighting
+  scene/cadSiteGeometry.ts    Parsed CAD site-plan geometry
+  scene/cadSiteLayer.ts       Cesium overlay for the CAD site plan (off by default)
+scripts/
+  cad-import.mjs          OPTIONAL CAD/asset import (STEP/IGES/OBJ→GLB hooks, guarded, dev-time only)
+  smoke-test.mjs          Release smoke test — the `npm test` gate
+docs/cad/
+  warda-site-plan.dxf     Dimensioned site plan (DXF R2010, metres)
+  warda-site-plan.pdf/.png  Rendered derivatives
+public/models/            GLB assets referenced by the manifest (see provenance notes)
 public/brand/             Static favicon
+dist/build-info.json      Emitted by every production build: version, commit, build time
 ```
+
+## Versioning & build metadata (v2.1.0)
+
+`package.json` is the single source of truth for the app version. At build time
+`vite.config.js` injects it into the bundle via `define`:
+
+- `__APP_VERSION__` — e.g. `2.1.0` (consumed by `buildStamp()` in
+  `src/scene/loadAssetsFromManifest.ts`; the asset loader logs it at boot)
+- `__BUILD_TIME__` — ISO-8601 UTC build timestamp
+- `__GIT_COMMIT__` — short commit hash, degrading to `unknown` for archive builds
+
+Every `npm run build` also emits **`dist/build-info.json`**:
+
+```json
+{ "name": "warda-strike-reconstruction-3d", "version": "2.1.0",
+  "buildTimeUtc": "…", "gitCommit": "…", "bundler": "vite@5.4.10" }
+```
+
+Builds from a plain ZIP (no `.git`) and builds with no CAD tooling installed
+both succeed — all metadata and CAD steps degrade gracefully, never fatally.
+
+## CAD / asset import pipeline (optional)
+
+`scripts/cad-import.mjs` brings external CAD/mesh content into the Blender GLB
+asset pipeline **defensively** — it is a dev-time convenience and is *not*
+wired into `npm run build`:
+
+| Input (drop into `cad-inbox/`) | Handling |
+|---|---|
+| `.step` / `.stp` / `.iges` / `.igs` | Tessellated to GLB by the first available tool: **Mayo-style converter** (`mayo`, `MAYO_BIN`), **FreeCAD** (`FreeCADCmd`), or **assimp** |
+| `.obj` | Converted to GLB via assimp |
+| `.glb` | Validated in place (magic, JSON chunk, accessor bounding box) |
+
+Each output is fingerprinted (SHA-256, bytes, glTF bbox) into
+`public/models/imported/import-report.json`, matching the manifest's integrity
+metadata. With no CAD tool installed the script logs the gap and exits 0 —
+the build is never blocked. `npm run cad:import:merge -- --at <lon,lat[,h]>`
+additionally appends validated entries to `src/assets/assetManifest.json`;
+georeferencing is always supplied explicitly by the operator (never invented).
+At runtime, `loadAssetsFromManifest(scene, { extraAssets })` can inject such
+entries without touching the manifest JSON.
+
+## Testing
+
+The repo intentionally keeps a zero-dependency test gate:
+
+```bash
+npm run build   # produce dist/ first
+npm test        # scripts/smoke-test.mjs
+```
+
+The smoke test asserts: version shape, `dist/build-info.json` consistency,
+hashed JS/CSS bundle presence, the injected `__APP_VERSION__` define reaching
+the bundle, full `assetManifest.json` validation (mirroring the TS validator),
+per-GLB existence + size + SHA-256 + magic, and a DXF sanity check on
+`docs/cad/warda-site-plan.dxf`. It exits non-zero on any failure.
 
 ## 3D terrain & photorealistic tiles (token-free default + optional upgrade)
 
