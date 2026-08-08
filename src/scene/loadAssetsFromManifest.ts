@@ -26,6 +26,42 @@ import { MODEL_LIGHT_COLOR, SHADOWS_ENABLED } from '../config/lightingConfig';
 
 const C: any = CesiumNS;
 
+// --- v2.1.0 refactor: build stamp + hardened loading -------------------------
+// __APP_VERSION__ / __GIT_COMMIT__ are injected by vite.config.js `define`
+// (see the build-script refactor); the typeof guards keep this module safe in
+// dev/test contexts where the define is absent.
+declare const __APP_VERSION__: string | undefined;
+declare const __GIT_COMMIT__: string | undefined;
+
+/** Human-readable build stamp for logs/telemetry (never throws). */
+export function buildStamp(): string {
+  const v = typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : 'dev';
+  const c = typeof __GIT_COMMIT__ !== 'undefined' ? __GIT_COMMIT__ : 'unknown';
+  return `v${v} @ ${c}`;
+}
+
+/** Bucket a load failure so operators can triage network vs decode at a glance. */
+function classifyError(err: any): string {
+  const msg = String(err?.message || err || 'unknown error');
+  if (/fetch|network|404|status of|failed to load/i.test(msg)) return `network: ${msg}`;
+  if (/parse|decode|glb|gltf|draco|buffer|json/i.test(msg)) return `decode: ${msg}`;
+  return msg;
+}
+
+/**
+ * One retry with a short backoff for transient network hiccups. Deliberately
+ * conservative (single retry, 400 ms): a deterministically missing/corrupt GLB
+ * must fail fast into `failed`, never stall the theatre boot.
+ */
+async function withRetry<T>(fn: () => Promise<T>, backoffMs = 400): Promise<T> {
+  try {
+    return await fn();
+  } catch {
+    await new Promise((resolve) => setTimeout(resolve, backoffMs));
+    return fn();
+  }
+}
+
 export interface LoadedAsset {
   id: string;
   entry: AssetEntry;
@@ -77,7 +113,7 @@ export function buildModelMatrix(entry: AssetEntry): any {
  */
 export async function loadAssetsFromManifest(
   scene: any,
-  options: { verbose?: boolean } = {},
+  options: { verbose?: boolean; extraAssets?: AssetEntry[] } = {},
 ): Promise<LoadAssetsResult> {
   const result: LoadAssetsResult = {
     loaded: [], failed: [], totalPayloadMB: totalPayloadMB(),
@@ -88,7 +124,12 @@ export async function loadAssetsFromManifest(
     return result;
   }
 
-  const problems = validateManifest(assetManifest);
+  // v2.1.0 CAD/asset integration hook: callers may inject additional entries
+  // (e.g. CAD-imported GLBs from scripts/cad-import.mjs) without editing the
+  // manifest JSON. They are validated with the same rules before load.
+  const extras = Array.isArray(options.extraAssets) ? options.extraAssets : [];
+  const entries = [...assetEntries, ...extras];
+  const problems = validateManifest({ ...assetManifest, assets: entries });
   if (problems.length && options.verbose !== false) {
     // eslint-disable-next-line no-console
     console.warn('[assetManifest] validation problems:', problems);
@@ -99,14 +140,14 @@ export async function loadAssetsFromManifest(
     MODEL_LIGHT_COLOR[0], MODEL_LIGHT_COLOR[1], MODEL_LIGHT_COLOR[2],
   );
 
-  for (const entry of assetEntries) {
+  for (const entry of entries) {
     // skip entries the validator rejected outright
     if (problems.some((p) => p.includes(`(${entry.id})`))) {
       result.failed.push({ id: entry.id, reason: 'failed manifest validation' });
       continue;
     }
     try {
-      const model = await C.Model.fromGltfAsync({
+      const model = await withRetry(() => C.Model.fromGltfAsync({
         url: resolveUrl(entry.file),
         modelMatrix: buildModelMatrix(entry),
         // scale already folded into the matrix above
@@ -126,7 +167,7 @@ export async function loadAssetsFromManifest(
         lightColor,
         imageBasedLighting: ibl,
         incrementallyLoadTextures: true,
-      });
+      }));
 
       scene.primitives.add(model);
       result.loaded.push({ id: entry.id, entry, model });
@@ -134,14 +175,14 @@ export async function loadAssetsFromManifest(
     } catch (err: any) {
       // eslint-disable-next-line no-console
       console.warn(`[assetManifest] failed to load "${entry.id}":`, err?.message || err);
-      result.failed.push({ id: entry.id, reason: String(err?.message || err) });
+      result.failed.push({ id: entry.id, reason: classifyError(err) });
     }
   }
 
   if (options.verbose !== false) {
     // eslint-disable-next-line no-console
     console.info(
-      `[assetManifest] loaded ${result.loaded.length}/${assetEntries.length} assets ` +
+      `[assetManifest] ${buildStamp()} — loaded ${result.loaded.length}/${entries.length} assets ` +
       `(${result.totalPayloadMB} MB)` +
       (result.usedProxyGeometry ? ' — CONTAINS PROXY GEOMETRY, not confirmed intelligence' : ''),
     );

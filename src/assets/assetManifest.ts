@@ -109,6 +109,15 @@ export function validateManifest(m: AssetManifest): string[] {
     }
     if (!Number.isFinite(a.scale) || a.scale <= 0) errors.push(`${at}: scale must be > 0`);
 
+    // v2.1.0 refactor: integrity metadata must be well-formed when present, so
+    // a hand-edited manifest fails loudly instead of passing a bad hash downstream.
+    if (!Number.isInteger(a.bytes) || (a.bytes as number) < 0) {
+      errors.push(`${at}: bytes must be a non-negative integer`);
+    }
+    if (typeof a.sha256 !== 'string' || !/^[0-9a-f]{64}$/i.test(a.sha256)) {
+      errors.push(`${at}: sha256 must be 64 hex characters`);
+    }
+
     const tier = a.provenance?.confidence;
     if (!tier || !VALID_TIERS.includes(tier)) {
       errors.push(`${at}: provenance.confidence must be one of ${VALID_TIERS.join(' | ')}`);
