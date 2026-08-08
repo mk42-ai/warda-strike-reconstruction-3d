@@ -13,3 +13,6 @@ deploy_out.txt
 deploy_err.txt
 
 # NOTE: dist/ is intentionally COMMITTED for this deploy (rebuilt production bundle)
+
+# optional CAD import workspace (v2.1.0) — local scratch, not part of the app
+cad-inbox/
