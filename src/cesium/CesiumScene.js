@@ -29,6 +29,23 @@ import {
   simulateBallistic, ballisticAt,
 } from '../utils/geo.js';
 import { MARKER_URIS, BRAND } from '../brand/assets.js';
+// Centralised lighting grade + declarative GLB asset pipeline + CAD site layer.
+// These are helper modules invoked BY this existing bootstrap — not parallel
+// entry points. All lighting numbers come from src/config/lightingConfig.ts.
+import {
+  applyLighting, buildSunDirectionEcef, createSharedImageBasedLighting,
+} from '../scene/applyLighting.ts';
+import {
+  loadAssetsFromManifest, setManifestAssetsVisible, unloadManifestAssets,
+} from '../scene/loadAssetsFromManifest.ts';
+import { buildCadSiteLayer, setCadLayerVisible, destroyCadLayer } from '../scene/cadSiteLayer.ts';
+import {
+  IMAGERY_BRIGHTNESS, IMAGERY_GAMMA, IMAGERY_CONTRAST, IMAGERY_SATURATION,
+  IMAGERY_DARK_BRIGHTNESS, IMAGERY_DARK_GAMMA, IMAGERY_DARK_CONTRAST, IMAGERY_DARK_SATURATION,
+  GLOBE_BASE_COLOR_CSS, GLOBE_BASE_COLOR_THERMAL_CSS,
+  GLOBE_ATMOSPHERE_LIGHT_INTENSITY, BLOOM_BRIGHTNESS, BLOOM_BRIGHTNESS_THERMAL,
+  BLOOM_BRIGHTNESS_IMPACT, SUN_INTENSITY, SUN_COLOR_CSS,
+} from '../config/lightingConfig.ts';
 
 const C = Cesium;
 const carto = (lon, lat, h = 0) => C.Cartesian3.fromDegrees(lon, lat, h);
@@ -141,6 +158,8 @@ export default class CesiumScene {
     this._buildStatic();
     this._buildDrone();
     this._buildThermalLayer();
+    this._buildCadLayer();          // dimensioned CAD site plan (toggleable overlay)
+    this._loadManifestAssets();     // declarative GLB pipeline (async, non-blocking)
     this._installPick();
     this._installResize();
     this.setProgress(0);
@@ -334,115 +353,46 @@ export default class CesiumScene {
     // CesiumScene constructor → sceneRef stayed null → the Play button (which
     // calls sceneRef.current?.setPlaying() with optional chaining) silently did
     // nothing. Guarding every call is what keeps the scene — and Play — alive.
-    // HDR: only enable if the runtime reports support for it.
+    // -- CENTRALISED LIGHTING GRADE (src/config/lightingConfig.ts) -------------
+    // Every HDR / tonemapper / exposure / gamma / sun / globe / atmosphere /
+    // fog / imagery / brightness-stage / AO / bloom / shadow tunable now lives
+    // in ONE config module and is applied by applyLighting(). No lighting
+    // number is hardcoded at this call site any more.
+    //
+    // This replaced an in-place block that was measurably darkening the scene:
+    //   * ACES tonemapping was forced on (Cesium 1.122's default is the
+    //     brighter PBR_NEUTRAL); ACES maps white 1.00 -> 0.818 through the HDR
+    //     gamma round-trip, so the scene could never reach white.
+    //   * postProcessStages.exposure was never set (the most direct lever).
+    //   * scene.imageBasedLighting DOES NOT EXIST on Scene in 1.122, so the
+    //     old `'imageBasedLighting' in scene` guard was always false and
+    //     luminanceAtZenith never applied — it is now attached per-Model.
+    //   * globe.atmosphereScatteringIntensity does not exist in 1.122 at all.
+    //   * scene.light.intensity is renormalised away for the globe (it only
+    //     affects glTF models via czm_lightColorHdr).
+    //   * lightingFadeOut/InDistance were inverted (40 km out / 20 km in).
+    //   * globe.baseColor was near-black (#0b1424) behind unstreamed tiles.
+    // See lightingConfig.ts for the full rationale and the measured numbers.
     try {
-      if (scene.highDynamicRangeSupported !== false) scene.highDynamicRange = true;
-    } catch (_) { /* HDR unsupported → SDR path */ }
-    // MSAA: only when the context actually supports multisampling.
-    try {
-      if (scene.msaaSupported !== false) scene.msaaSamples = 4;
-      else scene.msaaSamples = 1;
-    } catch (_) { try { scene.msaaSamples = 1; } catch (__) {} }
-    // FXAA: cheap, broadly supported, but still guarded.
-    try {
-      if (scene.postProcessStages && scene.postProcessStages.fxaa) {
-        scene.postProcessStages.fxaa.enabled = true;
+      const lightingReport = applyLighting(scene, this.viewer);
+      this._lightingReport = lightingReport;
+      if (lightingReport.skipped.length) {
+        // eslint-disable-next-line no-console
+        console.warn('[CesiumScene] lighting knobs skipped on this GPU:', lightingReport.skipped);
       }
-    } catch (_) { /* FXAA unavailable → MSAA/native AA still apply */ }
-    // physically based sun + globe lighting
-    scene.globe.enableLighting = true;
-    scene.globe.dynamicAtmosphereLighting = true;
-    scene.globe.dynamicAtmosphereLightingFromSun = true;
-    scene.globe.showGroundAtmosphere = true;
-    scene.globe.atmosphereLightIntensity = 14.0;   // a touch brighter key light
-    // image-based / ambient lighting so shadowed faces read with realistic fill
-    try {
-      scene.globe.lightingFadeOutDistance = 40_000.0;
-      scene.globe.lightingFadeInDistance = 20_000.0;
-      scene.globe.nightFadeOutDistance = 40_000.0;
-      scene.globe.atmosphereScatteringIntensity = 2.6;
-      if (scene.light) scene.light.intensity = 3.0;             // sun intensity
-      if ('imageBasedLighting' in scene && scene.imageBasedLighting) {
-        scene.imageBasedLighting.imageBasedLightingFactor = new C.Cartesian2(1.0, 1.0);
-        scene.imageBasedLighting.luminanceAtZenith = 0.5;       // ambient IBL fill
-      }
-      if ('sphericalHarmonicCoefficients' in scene) { /* default env IBL kept */ }
-    } catch (_) {}
+    } catch (e) {
+      // eslint-disable-next-line no-console
+      console.warn('[CesiumScene] applyLighting failed, keeping engine defaults:', e);
+    }
+
     scene.globe.depthTestAgainstTerrain = true;    // tiles/markers sit on terrain
-    scene.globe.baseColor = C.Color.fromCssColorString('#0b1424');
-    scene.globe.maximumScreenSpaceError = 1.5;     // sharper terrain/imagery detail
     scene.globe.preloadSiblings = true;            // fewer holes while moving
-    // tuned distance fog → depth cue without washing the corridor out
-    scene.fog.enabled = true;
-    scene.fog.density = 0.00012;
-    scene.fog.screenSpaceErrorFactor = 4.0;
-    scene.skyAtmosphere.show = true;
-    scene.skyAtmosphere.atmosphereLightIntensity = 18.0;
-    // ACES tone mapping on the Cesium HDR pipeline — FEATURE-DETECTED so it
-    // no-ops on builds that lack the Tonemapper enum / postProcessStages slot.
-    try {
-      if ('Tonemapper' in C && scene.postProcessStages && 'tonemapper' in scene.postProcessStages) {
-        scene.postProcessStages.tonemapper = C.Tonemapper.ACES;
-      }
-    } catch (_) { /* tonemapper unsupported on this Cesium build → skip */ }
     // camera preloads: warm tiles for flight destinations + when hidden so a
     // damped flyTo lands on already-streamed, high-detail geometry (no pop-in).
     try {
       scene.preloadFlightDestinations = true;
       scene.camera.percentageChanged = 0.1;
     } catch (_) {}
-
-    // bloom for tracers / thermal glow (guarded: no-op if unavailable)
-    try {
-      const bloom = scene.postProcessStages.bloom;
-      if (bloom) {
-        bloom.enabled = true;
-        bloom.uniforms.glowOnly = false;
-        bloom.uniforms.contrast = 128;
-        bloom.uniforms.brightness = -0.2;
-        bloom.uniforms.delta = 1.0;
-        bloom.uniforms.sigma = 2.6;
-        bloom.uniforms.stepSize = 1.0;
-      }
-    } catch (_) { /* bloom unavailable on this GPU → skip glow */ }
-
-    // -- SCREEN-SPACE AMBIENT OCCLUSION (SSAO) --------------------------------
-    // Cesium ships an ambient-occlusion post-process stage that darkens creases
-    // and where geometry meets the ground — it grounds the buildings/drone and
-    // adds cinematic contact shadowing. It needs a depth texture, so it is
-    // FEATURE-DETECTED + guarded (no-ops on GPUs/contexts without depth support,
-    // exactly like the bloom/silhouette stages) and is disabled on renderError.
-    try {
-      const ao = scene.postProcessStages && scene.postProcessStages.ambientOcclusion;
-      if (ao) {
-        ao.enabled = true;
-        if (ao.uniforms) {
-          ao.uniforms.intensity = 3.2;         // strength of the darkening
-          ao.uniforms.bias = 0.1;              // avoid self-occlusion acne
-          ao.uniforms.lengthCap = 0.28;        // max world-space sample radius
-          ao.uniforms.stepSize = 1.9;
-          ao.uniforms.blurStepSize = 0.86;     // soften the AO term
-        }
-      }
-    } catch (_) { /* AO unsupported on this GPU → skip contact shadowing */ }
-
-    // -- DYNAMIC SOFT SHADOWS --------------------------------------------------
-    // The viewer was created with shadows:true; here we tune the shadow map for
-    // presentation-grade SOFT shadows (PCF), a larger map for crisp edges, and a
-    // sun-driven light source so the drone + buildings cast real shadows across
-    // the corridor. All guarded so a weak GPU simply keeps hard/again-safe shadows.
-    try {
-      const sm = scene.shadowMap;
-      if (sm) {
-        sm.enabled = true;
-        sm.softShadows = true;                 // PCF soft-shadow filtering
-        sm.size = 2048;                        // sharper shadow edges (was default 2048/1024)
-        sm.darkness = 0.34;                    // how dark the shadowed areas read
-        sm.maximumDistance = 8000.0;           // shadow range around the focus
-        if ('normalOffset' in sm) sm.normalOffset = true;
-        if ('fadingEnabled' in sm) sm.fadingEnabled = true;
-      }
-    } catch (_) { /* shadow map tuning unsupported → viewer default shadows */ }
 
     // edge-sharpening post-process: crisp building/tile silhouettes on top of
     // MSAA+FXAA (subtle, presentation-grade — not a hard outline).
@@ -514,16 +464,14 @@ export default class CesiumScene {
       this._dayIso = '2025-06-21T09:30:00Z';
       this._applyDaylight();
       // Make the sun the lighting source and ensure globe lighting is on so the
-      // daylight actually reaches terrain/imagery in every mode.
+      // daylight actually reaches terrain/imagery in every mode. The explicit
+      // DirectionalLight (azimuth/elevation matched to the Blender sun) is
+      // installed by applyLighting() above — do not overwrite it with a
+      // SunLight here, or the Blender-matched key direction is lost.
       if (scene.sun) scene.sun.show = true;
       if (scene.moon) scene.moon.show = false;
       scene.globe.enableLighting = true;
-      // brighten the lit side so captured imagery never reads muddy/black
-      scene.globe.atmosphereLightIntensity = 20.0;
-      if (scene.light) {
-        scene.light = new C.SunLight();        // explicit physically based sun
-        scene.light.intensity = 3.0;
-      }
+      scene.globe.atmosphereLightIntensity = GLOBE_ATMOSPHERE_LIGHT_INTENSITY;
     } catch (_) { /* keep default clock/lighting if anything is unavailable */ }
 
     // Terrain: LIVE, key-free ESRI World Terrain is loaded asynchronously in
@@ -550,8 +498,19 @@ export default class CesiumScene {
       if (scene.skyAtmosphere) scene.skyAtmosphere.show = true;
       if (scene.fog) scene.fog.enabled = true;
       scene.globe.showGroundAtmosphere = true;
-      // keep a physically based sun light (not a fixed flashlight at the camera)
-      try { if (!(scene.light instanceof C.SunLight)) { scene.light = new C.SunLight(); scene.light.intensity = 3.0; } } catch (_) {}
+      // Keep the explicit Blender-matched DirectionalLight installed by
+      // applyLighting(). Only re-create it if something removed it entirely —
+      // never downgrade back to a default SunLight, which would discard the
+      // configured azimuth/elevation and intensity.
+      try {
+        if (!scene.light) {
+          scene.light = new C.DirectionalLight({
+            direction: buildSunDirectionEcef(),
+            color: C.Color.fromCssColorString(SUN_COLOR_CSS),
+            intensity: SUN_INTENSITY,
+          });
+        }
+      } catch (_) {}
     } catch (_) { /* never let a lighting refresh break a mode switch */ }
   }
 
@@ -590,7 +549,10 @@ export default class CesiumScene {
         ),
         {}
       );
-      this._tuneImageryLayer(esri, { contrast: 1.06, saturation: 1.10, gamma: 1.02, brightness: 1.02 });
+      this._tuneImageryLayer(esri, {
+        contrast: IMAGERY_CONTRAST, saturation: IMAGERY_SATURATION,
+        gamma: IMAGERY_GAMMA, brightness: IMAGERY_BRIGHTNESS,
+      });
       layers.add(esri);
       this._baseLayers.satellite = esri;
     } catch (_) { /* Carto + detail patch below still give a usable base */ }
@@ -607,7 +569,10 @@ export default class CesiumScene {
         })
       );
       carto.show = false;
-      this._tuneImageryLayer(carto, { contrast: 1.12, saturation: 0.92, gamma: 1.0, brightness: 1.02 });
+      this._tuneImageryLayer(carto, {
+        contrast: IMAGERY_DARK_CONTRAST, saturation: IMAGERY_DARK_SATURATION,
+        gamma: IMAGERY_DARK_GAMMA, brightness: IMAGERY_DARK_BRIGHTNESS,
+      });
       layers.add(carto);
       this._baseLayers.dark = carto;
     } catch (_) { /* satellite base still active */ }
@@ -629,7 +594,10 @@ export default class CesiumScene {
         {}
       );
       if (alpha != null) layer.alpha = alpha;
-      this._tuneImageryLayer(layer, { contrast: 1.06, saturation: 1.08, gamma: 1.02, brightness: 1.02 });
+      this._tuneImageryLayer(layer, {
+        contrast: IMAGERY_CONTRAST, saturation: IMAGERY_SATURATION,
+        gamma: IMAGERY_GAMMA, brightness: IMAGERY_BRIGHTNESS,
+      });
       this.viewer.imageryLayers.add(layer);
       this._detailLayers.push(layer);
       return layer;
@@ -906,11 +874,18 @@ export default class CesiumScene {
     this.thermalEntities.forEach((e) => (e.show = on));
     // thermal palette: desaturate globe + lift bloom
     const scene = this.viewer.scene;
-    scene.globe.baseColor = on ? C.Color.fromCssColorString('#0a0a0a') : C.Color.fromCssColorString('#0b1424');
+    scene.globe.baseColor = C.Color.fromCssColorString(
+      on ? GLOBE_BASE_COLOR_THERMAL_CSS : GLOBE_BASE_COLOR_CSS,
+    );
     // guarded bloom (may be unavailable on this GPU after renderError recovery)
-    try { if (scene.postProcessStages && scene.postProcessStages.bloom) scene.postProcessStages.bloom.uniforms.brightness = on ? 0.25 : -0.2; } catch (_) {}
+    try {
+      if (scene.postProcessStages && scene.postProcessStages.bloom) {
+        scene.postProcessStages.bloom.uniforms.brightness =
+          on ? BLOOM_BRIGHTNESS_THERMAL : BLOOM_BRIGHTNESS;
+      }
+    } catch (_) {}
     // restore the DAYLIGHT intensity (20.0) when leaving thermal, not the old 12.0
-    scene.globe.atmosphereLightIntensity = on ? 3.0 : 20.0;
+    scene.globe.atmosphereLightIntensity = on ? 3.0 : GLOBE_ATMOSPHERE_LIGHT_INTENSITY;
     this.imageryAlpha(on ? 0.32 : 1.0);
     if (!on) this._applyDaylight();              // re-assert daylight leaving thermal
     if (on) this.setCamMode('thermal');
@@ -1105,8 +1080,12 @@ export default class CesiumScene {
       if (bloom) {
         const prev = bloom.uniforms.brightness;
         bloom.enabled = true;
-        bloom.uniforms.brightness = 0.9;                 // brighter spike
-        setTimeout(() => { try { bloom.uniforms.brightness = this.thermal ? 0.25 : prev; } catch (_) {} }, 1800);
+        bloom.uniforms.brightness = BLOOM_BRIGHTNESS_IMPACT;   // brighter spike
+        setTimeout(() => {
+          try {
+            bloom.uniforms.brightness = this.thermal ? BLOOM_BRIGHTNESS_THERMAL : prev;
+          } catch (_) {}
+        }, 1800);
       }
     } catch (_) {}
   }
@@ -1500,6 +1479,62 @@ export default class CesiumScene {
     if (name === 'corridor' && this.corridorEntity) this.corridorEntity.show = on;
     if (name === 'geofence' && this.geofenceEntity) this.geofenceEntity.show = on;
     if (name === 'waypoints') this.waypointEntities.forEach((e) => (e.show = on));
+    // Blender/proxy GLB models loaded from src/assets/assetManifest.json
+    if (name === 'assets') {
+      this._assetsVisible = on;
+      setManifestAssetsVisible(this._manifestAssets || [], on);
+    }
+    // Dimensioned CAD site plan — an ADDITIONAL overlay, never a replacement
+    if (name === 'cad') {
+      this._cadVisible = on;
+      setCadLayerVisible(this._cadLayer, on);
+    }
+    try { this.viewer && this.viewer.scene.requestRender(); } catch (_) {}
+  }
+
+  // -- declarative GLB asset pipeline ----------------------------------------
+  // Reads src/assets/assetManifest.json and instantiates every entry via
+  // Cesium.Model.fromGltfAsync with a headingPitchRollToFixedFrame matrix.
+  // Async and fully guarded: a failed model must never blank the theatre.
+  _loadManifestAssets() {
+    this._manifestAssets = [];
+    this._assetsVisible = true;
+    try {
+      loadAssetsFromManifest(this.viewer.scene)
+        .then((res) => {
+          if (this._destroyed) {
+            unloadManifestAssets(this.viewer?.scene, res.loaded);
+            return;
+          }
+          this._manifestAssets = res.loaded;
+          this._assetReport = res;
+          setManifestAssetsVisible(res.loaded, this._assetsVisible);
+          try { this.viewer.scene.requestRender(); } catch (_) {}
+        })
+        .catch((e) => {
+          // eslint-disable-next-line no-console
+          console.warn('[CesiumScene] manifest asset load failed:', e);
+        });
+    } catch (e) {
+      // eslint-disable-next-line no-console
+      console.warn('[CesiumScene] manifest asset pipeline unavailable:', e);
+    }
+  }
+
+  // -- CAD site layer --------------------------------------------------------
+  // Dimensioned plan-view footprint / setbacks / standoff rings / access routes,
+  // added as an independently toggleable entity layer on top of the
+  // reconstruction. Hidden by default so it never obscures the default view.
+  _buildCadLayer() {
+    this._cadVisible = false;
+    try {
+      this._cadLayer = buildCadSiteLayer(this.viewer);
+      setCadLayerVisible(this._cadLayer, false);
+    } catch (e) {
+      // eslint-disable-next-line no-console
+      console.warn('[CesiumScene] CAD site layer unavailable:', e);
+      this._cadLayer = null;
+    }
   }
 
   // Realism tuning for ANY Cesium3DTileset already configured in the scene
@@ -1525,9 +1560,13 @@ export default class CesiumScene {
       ts.dynamicScreenSpaceError = true;       // relax SSE in the distance (perf)
       ts.dynamicScreenSpaceErrorDensity = 0.00278;
       ts.dynamicScreenSpaceErrorFactor = 4.0;
-      // light tiles with the scene's sun + image-based/ambient lighting
-      if ('imageBasedLighting' in ts && this.viewer?.scene?.imageBasedLighting) {
-        ts.imageBasedLighting = this.viewer.scene.imageBasedLighting;
+      // Light tiles with the SHARED ImageBasedLighting instance.
+      // NOTE: the previous source read `this.viewer.scene.imageBasedLighting`,
+      // which is ALWAYS undefined — Scene has no such property in Cesium 1.122
+      // (only Model and Cesium3DTileset do), so ambient fill never applied.
+      if ('imageBasedLighting' in ts) {
+        this._sharedIbl = this._sharedIbl || createSharedImageBasedLighting();
+        if (this._sharedIbl) ts.imageBasedLighting = this._sharedIbl;
       }
       if ('enableModelExperimental' in ts) ts.enableModelExperimental = true;
       // anisotropic texture filtering + mipmaps for crisp oblique ground tiles
@@ -1564,6 +1603,10 @@ export default class CesiumScene {
     try { if (this._onResize) window.removeEventListener('resize', this._onResize); } catch (_) {}
     try { this._ro && this._ro.disconnect(); } catch (_) {}
     try { this.handler && this.handler.destroy(); } catch (_) {}
+    // release manifest-loaded GLB primitives + the CAD overlay before the
+    // viewer goes away (StrictMode double-mount would otherwise leak them)
+    try { unloadManifestAssets(this.viewer?.scene, this._manifestAssets || []); } catch (_) {}
+    try { destroyCadLayer(this.viewer, this._cadLayer); } catch (_) {}
     try { this.viewer && this.viewer.destroy(); } catch (_) {}
   }
 }

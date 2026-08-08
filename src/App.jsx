@@ -20,6 +20,20 @@ const AirevWordmark = ({ className }) => (
   </span>
 );
 
+// Bottom-transport layer chips. 'assets' and 'cad' are new in the graphics
+// upgrade; CAD is an ADDITIONAL overlay and is off by default.
+const LAYER_LABELS = {
+  corridor: 'corridor', geofence: 'geofence', waypoints: 'waypoints',
+  assets: '3D assets', cad: 'CAD plan',
+};
+const LAYER_HINTS = {
+  corridor: 'Launch\u2192impact great-circle corridor',
+  geofence: 'Endurance-derived detection ring',
+  waypoints: '6 numbered corridor waypoints',
+  assets: 'Georeferenced GLB models (currently PROXY geometry \u2014 not confirmed intelligence)',
+  cad: 'Dimensioned CAD site plan: footprint, setbacks, standoff rings, access routes',
+};
+
 const Svg = ({ markup, className, style }) => (
   <span className={className} style={style} dangerouslySetInnerHTML={{ __html: markup }} />
 );
@@ -39,7 +53,12 @@ export default function App() {
   const [picked, setPicked] = useState(null);
   const [imageryMode, setImageryMode] = useState('satellite');   // 'satellite' (ESRI) | 'dark' (Carto)
   const [clock, setClock] = useState('');                        // live UTC clock for the classification banner
-  const [layers, setLayers] = useState({ corridor: true, geofence: true, waypoints: true });
+  // 'assets' = Blender/proxy GLB models from src/assets/assetManifest.json
+  // 'cad'    = dimensioned CAD site plan overlay (src/scene/cadSiteLayer.ts),
+  //           OFF by default so it augments rather than obscures the scene.
+  const [layers, setLayers] = useState({
+    corridor: true, geofence: true, waypoints: true, assets: true, cad: false,
+  });
 
   const thermalReport = analyzeThermal(VIIRS_DETECTIONS);
 
@@ -316,8 +335,15 @@ export default function App() {
       {/* bottom transport */}
       <footer className="transport">
         <div className="layers">
-          {['corridor', 'geofence', 'waypoints'].map((l) => (
-            <button key={l} className={`chip ${layers[l] ? 'on' : ''}`} onClick={() => toggleLayer(l)}>{l}</button>
+          {['corridor', 'geofence', 'waypoints', 'assets', 'cad'].map((l) => (
+            <button
+              key={l}
+              className={`chip ${layers[l] ? 'on' : ''}`}
+              title={LAYER_HINTS[l] || l}
+              onClick={() => toggleLayer(l)}
+            >
+              {LAYER_LABELS[l] || l}
+            </button>
           ))}
         </div>
         <button className="play" onClick={togglePlay}>{playing ? '❚❚ PAUSE' : '▶ PLAY STRIKE'}</button>
