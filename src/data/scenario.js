@@ -341,18 +341,23 @@ export const CAMERA_MODES = [
 ];
 
 // ---- Timeline ---------------------------------------------------------------
-// Presentation framing is DAYTIME for defensive reconstruction readability
-// (not an operational clock-time / night strike depiction).
+// v3 presentation framing: DAYTIME STRIKE (defensive reconstruction readability).
+// Not an operational clock-time / night / cyberpunk depiction.
 export const TIMELINE = {
   flightSeconds: 48, // sim seconds for a full launch→impact replay at 1x
-  // Midday framing (Gulf noon): 08:00Z ≈ 12:00 GST — high sun, max label contrast.
-  // v1 used 06:30Z morning; night clock (startHour 21) is explicitly retired.
+  // Bright local midday over Dubai (GST = UTC+4): 08:00Z ≈ 12:00 local.
+  // Night clock (startHour 21) is explicitly retired.
   startHour: 8,
   startMinute: 0,
   dayIso: '2025-06-21T08:00:00Z',
   framing: 'daytime',
-  framingLabel: 'DAYTIME · JUNE',
-  impactCaption: 'STRIKE IMPACT · DAYTIME',
+  // Headline rename (v3): DAYTIME STRIKE primary, DAYLIGHT impact caption.
+  eventTitle: 'DAYTIME STRIKE',
+  framingLabel: 'DAYTIME STRIKE',
+  impactCaption: 'STRIKE IMPACT — DAYLIGHT',
+  impactSubtitle: 'WARDA / JENNA · DAYLIGHT RECONSTRUCTION',
+  // Smaller secondary clock (optional operational reference — not the headline).
+  secondaryClockLabel: 'MIDDAY LOCAL · 12:00 GST',
   // Locked presentation clock — Cesium must not animate into night.
   lockClock: true,
 };

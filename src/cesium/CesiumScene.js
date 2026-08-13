@@ -758,44 +758,95 @@ export default class CesiumScene {
       },
     });
 
-    // v2 high-clarity label style for the Southern Gulf corridor timeline.
-    // Max contrast plate, heavy outline, almost no distance shrink, no glow/blur.
-    const clearLabel = (text, fillCss, bgCss, opts = {}) => ({
-      text,
-      font: opts.font || '900 26px Inter, Segoe UI, Arial, sans-serif',
-      fillColor: C.Color.fromCssColorString(fillCss),
-      outlineColor: C.Color.BLACK,
-      outlineWidth: 5,
-      style: C.LabelStyle.FILL_AND_OUTLINE,
-      showBackground: true,
-      // Fully opaque plate so map/globe never washes letterforms
-      backgroundColor: C.Color.fromCssColorString(bgCss).withAlpha(1.0),
-      backgroundPadding: new C.Cartesian2(16, 12),
-      pixelOffset: opts.pixelOffset || new C.Cartesian2(0, -38),
-      disableDepthTestDistance: Number.POSITIVE_INFINITY,
-      // Keep labels large at corridor overview — avoid blurry shrink
-      scaleByDistance: new C.NearFarScalar(60_000, 1.35, 2_500_000, 1.05),
-      translucencyByDistance: undefined,
-      horizontalOrigin: C.HorizontalOrigin.CENTER,
-      verticalOrigin: opts.verticalOrigin || C.VerticalOrigin.BOTTOM,
-    });
+    // v3 Cesium label best-practices for the Southern Gulf corridor timeline.
+    // FILL_AND_OUTLINE, real large font (not scaled-up tiny type), opaque navy
+    // backplate, scaleByDistance + translucencyByDistance + distanceDisplayCondition,
+    // eyeOffset separation, disableDepthTestDistance. No bloom/glow/blur.
+    // WCAG: white/near-white text on near-black plates ≥ 4.5:1; bold large ≥ 3:1.
+    const NAVY_BG = new C.Color(0.015, 0.025, 0.06, 0.96); // opaque navy plate
+    const clearLabel = (text, fillCss, opts = {}) => {
+      const bg = opts.bgColor
+        || (opts.bgCss ? C.Color.fromCssColorString(opts.bgCss).withAlpha(opts.bgAlpha != null ? opts.bgAlpha : 0.96) : NAVY_BG);
+      const near = opts.near != null ? opts.near : 1_000;
+      const far = opts.far != null ? opts.far : 1_200_000;
+      const ddcFar = opts.ddcFar != null ? opts.ddcFar : 1_000_000;
+      return {
+        text,
+        // Real large font — 700 22px default per Cesium label guidance (not scaled-up 10px)
+        font: opts.font || '700 22px Inter, Segoe UI, Arial, sans-serif',
+        fillColor: C.Color.fromCssColorString(fillCss || '#FFFFFF'),
+        outlineColor: C.Color.BLACK,
+        outlineWidth: opts.outlineWidth != null ? opts.outlineWidth : 3,
+        style: C.LabelStyle.FILL_AND_OUTLINE,
+        showBackground: true,
+        backgroundColor: bg,
+        backgroundPadding: opts.backgroundPadding || new C.Cartesian2(14, 10),
+        pixelOffset: opts.pixelOffset || new C.Cartesian2(0, -34),
+        eyeOffset: opts.eyeOffset || new C.Cartesian3(0.0, 0.0, -50.0),
+        disableDepthTestDistance: opts.disableDepthTestDistance != null
+          ? opts.disableDepthTestDistance
+          : Number.POSITIVE_INFINITY,
+        // Keep labels readable from corridor overview down to building scale
+        scaleByDistance: opts.scaleByDistance
+          || new C.NearFarScalar(near, 1.15, far, 0.85),
+        // Fade secondary labels at extreme range; primary strike keeps higher far scale
+        translucencyByDistance: opts.translucencyByDistance
+          || new C.NearFarScalar(near, 1.0, ddcFar, opts.primary ? 1.0 : 0.35),
+        distanceDisplayCondition: opts.distanceDisplayCondition
+          || new C.DistanceDisplayCondition(0.0, ddcFar),
+        horizontalOrigin: opts.horizontalOrigin || C.HorizontalOrigin.CENTER,
+        verticalOrigin: opts.verticalOrigin || C.VerticalOrigin.BOTTOM,
+      };
+    };
+
+    // Entity clustering so waypoint/site labels do not stack on top of each other
+    try {
+      if (v.entities && v.entities.cluster) {
+        v.entities.cluster.enabled = true;
+        v.entities.cluster.pixelRange = 48;
+        v.entities.cluster.minimumClusterSize = 3;
+        v.entities.cluster.clusterLabels = true;
+        v.entities.cluster.clusterBillboards = false;
+        v.entities.cluster.clusterPoints = false;
+      }
+    } catch (_) { /* clustering optional */ }
+
+    // Alternating pixel offsets so adjacent waypoint labels don't overlap
+    const WP_OFFSETS = [
+      new C.Cartesian2(0, -40),
+      new C.Cartesian2(18, -52),
+      new C.Cartesian2(-18, -40),
+      new C.Cartesian2(22, -56),
+      new C.Cartesian2(-22, -44),
+      new C.Cartesian2(0, -60),
+    ];
 
     // 6 numbered waypoint markers (horizontal corridor timeline nodes)
+    // Secondary: hide earlier when zoomed far out (ddcFar lower than strike).
     this.waypointEntities = CORRIDOR.waypoints.map((w, i) => v.entities.add({
       id: `wp-${i}`,
       position: carto(w.lon, w.lat, this._altAt(i / (CORRIDOR.waypoints.length - 1)) + 200),
       point: {
-        pixelSize: 16,
+        pixelSize: 14,
         color: C.Color.fromCssColorString(BRAND.accent),
         outlineColor: C.Color.WHITE,
         outlineWidth: 3,
         disableDepthTestDistance: Number.POSITIVE_INFINITY,
+        // Markers stay visible farther than secondary labels
+        scaleByDistance: new C.NearFarScalar(1_000, 1.2, 1_500_000, 0.7),
       },
       label: clearLabel(
         `${w.legOrder}  ${w.name}`,
         '#FFFFFF',
-        '#000000',
-        { font: '900 26px Inter, Segoe UI, Arial, sans-serif' },
+        {
+          font: '700 20px Inter, Segoe UI, Arial, sans-serif',
+          outlineWidth: 3,
+          pixelOffset: WP_OFFSETS[i % WP_OFFSETS.length],
+          eyeOffset: new C.Cartesian3(0, 0, -40 - i * 8),
+          ddcFar: 750_000, // secondary: hide when very far
+          primary: false,
+          backgroundPadding: new C.Cartesian2(12, 8),
+        },
       ),
       _wp: w,
     }));
@@ -804,28 +855,61 @@ export default class CesiumScene {
     v.entities.add({
       id: 'launch-site',
       position: carto(LAUNCH_SITE.lon, LAUNCH_SITE.lat, LAUNCH_SITE.height),
-      billboard: { image: MARKER_URIS.launch, width: 42, height: 50, verticalOrigin: C.VerticalOrigin.BOTTOM, disableDepthTestDistance: Number.POSITIVE_INFINITY },
+      billboard: {
+        image: MARKER_URIS.launch,
+        width: 42,
+        height: 50,
+        verticalOrigin: C.VerticalOrigin.BOTTOM,
+        disableDepthTestDistance: Number.POSITIVE_INFINITY,
+        pixelOffset: new C.Cartesian2(-8, 0),
+      },
       label: clearLabel(
         'CORRIDOR ORIGIN · BANDAR ABBAS',
         '#FFFFFF',
-        '#1A0A08',
-        { font: '900 24px Inter, Segoe UI, Arial, sans-serif', pixelOffset: new C.Cartesian2(0, 24) },
+        {
+          font: '700 20px Inter, Segoe UI, Arial, sans-serif',
+          outlineWidth: 3,
+          pixelOffset: new C.Cartesian2(0, 28),
+          eyeOffset: new C.Cartesian3(0, 0, -60),
+          ddcFar: 1_200_000,
+          primary: false,
+          bgCss: '#0A1018',
+          bgAlpha: 0.96,
+        },
       ),
       _site: LAUNCH_SITE,
     });
 
-    // impact site billboard — daytime STRIKE IMPACT caption (not a night clock time)
-    const impactCaption = (TIMELINE && TIMELINE.impactCaption) || 'STRIKE IMPACT · DAYTIME';
-    const framingLabel = (TIMELINE && TIMELINE.framingLabel) || 'DAYTIME · JUNE';
+    // impact site — PRIMARY strike label (highest priority, stays visible farthest)
+    const impactCaption = (TIMELINE && TIMELINE.impactCaption) || 'STRIKE IMPACT — DAYLIGHT';
+    const eventTitle = (TIMELINE && (TIMELINE.eventTitle || TIMELINE.framingLabel)) || 'DAYTIME STRIKE';
+    const impactSubtitle = (TIMELINE && TIMELINE.impactSubtitle) || 'WARDA / JENNA · DAYLIGHT RECONSTRUCTION';
     v.entities.add({
       id: 'impact-site',
       position: carto(IMPACT_SITE.lon, IMPACT_SITE.lat, IMPACT_SITE.height),
-      billboard: { image: MARKER_URIS.impact, width: 46, height: 54, verticalOrigin: C.VerticalOrigin.BOTTOM, disableDepthTestDistance: Number.POSITIVE_INFINITY },
+      billboard: {
+        image: MARKER_URIS.impact,
+        width: 48,
+        height: 56,
+        verticalOrigin: C.VerticalOrigin.BOTTOM,
+        disableDepthTestDistance: Number.POSITIVE_INFINITY,
+        pixelOffset: new C.Cartesian2(10, 0),
+      },
       label: clearLabel(
-        `${impactCaption}\n${framingLabel} · WARDA / JENNA`,
-        '#FFE8FF',
-        '#120018',
-        { font: '900 26px Inter, Segoe UI, Arial, sans-serif', pixelOffset: new C.Cartesian2(0, 26) },
+        `${eventTitle}\n${impactCaption}\n${impactSubtitle}`,
+        '#FFFFFF',
+        {
+          font: '700 22px Inter, Segoe UI, Arial, sans-serif',
+          outlineWidth: 3,
+          pixelOffset: new C.Cartesian2(0, 30),
+          eyeOffset: new C.Cartesian3(0, 0, -80), // pull in front of other labels
+          ddcFar: 1_500_000, // primary: visible at corridor overview
+          primary: true,
+          bgCss: '#03060F',
+          bgAlpha: 0.97,
+          backgroundPadding: new C.Cartesian2(16, 12),
+          scaleByDistance: new C.NearFarScalar(1_000, 1.2, 1_500_000, 0.95),
+        },
       ),
       _site: IMPACT_SITE,
     });
@@ -854,8 +938,16 @@ export default class CesiumScene {
         label: clearLabel(
           'EARLY-WARNING RING · +8.2 min detection lead',
           '#FFFCE8',
-          '#1A1400',
-          { font: '900 22px Inter, Segoe UI, Arial, sans-serif', pixelOffset: new C.Cartesian2(0, -36) },
+          {
+            font: '700 18px Inter, Segoe UI, Arial, sans-serif',
+            outlineWidth: 3,
+            pixelOffset: new C.Cartesian2(0, -36),
+            eyeOffset: new C.Cartesian3(0, 0, -30),
+            ddcFar: 900_000,
+            primary: false,
+            bgCss: '#1A1400',
+            bgAlpha: 0.96,
+          },
         ),
       });
     }
@@ -927,18 +1019,21 @@ export default class CesiumScene {
         show: new C.CallbackProperty(() => this._modelFailed === true, false),
       },
       label: {
-        text: 'AIRFRAME TRACK · DAYTIME',
-        font: '900 22px Inter, Segoe UI, Arial, sans-serif',
+        text: 'AIRFRAME TRACK · DAYLIGHT',
+        font: '700 18px Inter, Segoe UI, Arial, sans-serif',
         fillColor: C.Color.fromCssColorString('#FFFFFF'),
         outlineColor: C.Color.BLACK,
-        outlineWidth: 5,
+        outlineWidth: 3,
         style: C.LabelStyle.FILL_AND_OUTLINE,
         showBackground: true,
-        backgroundColor: C.Color.fromCssColorString('#000000').withAlpha(1.0),
-        backgroundPadding: new C.Cartesian2(14, 10),
-        pixelOffset: new C.Cartesian2(0, 32),
+        backgroundColor: new C.Color(0.015, 0.025, 0.06, 0.96),
+        backgroundPadding: new C.Cartesian2(12, 8),
+        pixelOffset: new C.Cartesian2(0, 28),
+        eyeOffset: new C.Cartesian3(0, 0, -40),
         disableDepthTestDistance: Number.POSITIVE_INFINITY,
-        scaleByDistance: new C.NearFarScalar(50_000, 1.25, 1_000_000, 1.0),
+        scaleByDistance: new C.NearFarScalar(1_000, 1.15, 800_000, 0.85),
+        translucencyByDistance: new C.NearFarScalar(1_000, 1.0, 800_000, 0.4),
+        distanceDisplayCondition: new C.DistanceDisplayCondition(0.0, 800_000),
       },
     });
 
