@@ -13,3 +13,8 @@ deploy_out.txt
 deploy_err.txt
 
 # NOTE: dist/ is intentionally COMMITTED for this deploy (rebuilt production bundle)
+
+.env
+.env.*
+*.pem
+*credentials*
