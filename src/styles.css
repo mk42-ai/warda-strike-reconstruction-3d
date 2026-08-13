@@ -343,29 +343,86 @@ body {
 .co-header {
   font-family: var(--sans);
   font-weight: 900;
-  font-size: 15px;
-  letter-spacing: 0.6px;
-  line-height: 1.35;
+  font-size: 17px; /* larger for screenshot-legibility */
+  letter-spacing: 0.5px;
+  line-height: 1.3;
   color: #ffe08a; /* crisp amber, no glow wash */
-  background: #0a0e13;
+  background: #05070a;
   border: 2px solid #ffb02e;
   border-radius: 8px;
-  padding: 10px 12px;
+  padding: 12px 14px;
   text-align: center;
   margin-bottom: 12px;
   text-shadow: none !important;
   filter: none !important;
   opacity: 1 !important;
-  overflow: visible;
+  overflow: visible; /* never clip header text */
+  white-space: normal;
+}
+.co-header-main {
+  display: block;
+  font-size: 17px;
+  font-weight: 900;
+  color: #ffe08a;
+  letter-spacing: 0.4px;
+  line-height: 1.3;
+  text-shadow: none !important;
+  filter: none !important;
+}
+.co-header-sub {
+  display: block;
+  margin-top: 6px;
+  font-size: 14px;
+  font-weight: 800;
+  color: #e8eef4; /* higher contrast than prior #c8d0d8 */
+  letter-spacing: 0.4px;
+  text-shadow: none !important;
+  filter: none !important;
+}
+.co-header-day {
+  display: block;
+  margin-top: 6px;
+  font-size: 13px;
+  font-weight: 900;
+  color: #fff4cc;
+  letter-spacing: 0.8px;
+  text-transform: uppercase;
+  text-shadow: none !important;
+  filter: none !important;
 }
 .co-body {
   position: relative;
-  height: 360px;
-  background: rgba(5,7,10,0.88);
-  border: 2px solid rgba(78,227,155,0.35);
+  height: 400px; /* room for strike-impact caption under the axis */
+  background: rgba(5,7,10,0.94);
+  border: 2px solid rgba(78,227,155,0.45);
   border-radius: 10px;
   overflow: visible; /* do not clip labels */
   filter: none !important;
+}
+/* Magenta/purple STRIKE IMPACT caption under the corridor axis — daytime framing */
+.co-strike-caption {
+  position: absolute;
+  left: 50%;
+  bottom: 14px;
+  transform: translateX(-50%);
+  z-index: 6;
+  font-family: var(--sans);
+  font-size: 15px;
+  font-weight: 900;
+  letter-spacing: 1.2px;
+  text-transform: uppercase;
+  color: #f0d6ff; /* high-contrast magenta/purple */
+  background: #1a0a24;
+  border: 2px solid #c084fc;
+  border-radius: 8px;
+  padding: 8px 14px;
+  white-space: nowrap;
+  text-shadow: none !important;
+  filter: none !important;
+  opacity: 1 !important;
+  overflow: visible;
+  box-shadow: none; /* no neon bloom that hides letters */
+  pointer-events: none;
 }
 .co-route {
   position: absolute;
@@ -421,51 +478,55 @@ body {
   opacity: 1 !important;
 }
 .co-dot {
-  width: 20px;
-  height: 20px;
+  width: 22px;
+  height: 22px;
   border-radius: 50%;
   background: #4ee39b;
-  border: 2px solid #e8fff5;
-  box-shadow: none; /* solid node, no halo bloom */
+  border: 3px solid #e8fff5;
+  box-shadow: none; /* solid node, no halo bloom / neon smear */
   flex: 0 0 auto;
   z-index: 2;
   opacity: 1 !important;
+  filter: none !important;
 }
 .co-node.on .co-dot {
-  width: 24px;
-  height: 24px;
+  width: 26px;
+  height: 26px;
   border-width: 3px;
   box-shadow: none;
+  filter: none !important;
 }
 .co-plate {
   font-family: var(--sans);
-  font-size: 16px !important;
+  font-size: 17px !important; /* larger type for readability */
   font-weight: 900 !important;
-  letter-spacing: 0.5px;
+  letter-spacing: 0.4px;
   line-height: 1.25;
-  color: #f2fff8 !important;
-  background: #10161d !important;
+  color: #ffffff !important; /* max contrast on dark plate */
+  background: #05070a !important;
   border: 2px solid #4ee39b !important;
   border-radius: 8px;
-  padding: 8px 12px;
+  padding: 9px 13px;
   white-space: nowrap;
   text-shadow: none !important;
   filter: none !important;
   opacity: 1 !important;
-  overflow: visible;
+  overflow: visible; /* never clip plate text */
   max-width: none;
 }
 .co-plate.slate {
-  background: #1a1224 !important;
-  color: #f0d6ff !important; /* high-contrast purple tag text */
+  background: #1a0a24 !important;
+  color: #f8e8ff !important; /* high-contrast purple tag text */
   border-color: #c084fc !important;
   text-shadow: none !important;
+  filter: none !important;
 }
 .co-plate.mint {
   background: #0b3d2e !important;
-  color: #b8ffd9 !important;
+  color: #e8fff5 !important;
   border-color: #4ee39b !important;
   text-shadow: none !important;
+  filter: none !important;
 }
 .co-tip {
   margin-top: 10px;
@@ -492,7 +553,11 @@ body {
 .kpi-strip *,
 .context-headline,
 .co-header,
+.co-header-main,
+.co-header-sub,
+.co-header-day,
 .co-plate,
+.co-strike-caption,
 .co-tip {
   text-shadow: none !important;
   filter: none !important;

@@ -509,10 +509,10 @@ export default class CesiumScene {
     // 10:00 local → a high, warm sun that lights the whole Iran→Dubai corridor
     // consistently. Guarded so a bad date string can never abort init.
     try {
-      // Fixed mid-MORNING daylight (summer-solstice sun, ~09:30Z). Stored on the
-      // instance so EVERY camera mode / play / thermal toggle can re-assert it
-      // via _applyDaylight() and the lighting can never flip to night.
-      this._dayIso = '2025-06-21T06:30:00Z'; // ~10:30 GST — high sun over Dubai
+      // Fixed mid-MORNING daylight from TIMELINE (daytime framing, not night clock).
+      // Stored so EVERY camera mode / play / thermal toggle re-asserts it via
+      // _applyDaylight() and lighting can never flip to a night clock time.
+      this._dayIso = (TIMELINE && TIMELINE.dayIso) || '2025-06-21T06:30:00Z';
       this._applyDaylight();
       // Make the sun the lighting source and ensure globe lighting is on so the
       // daylight actually reaches terrain/imagery in every mode.
@@ -723,23 +723,42 @@ export default class CesiumScene {
       },
     });
 
-    // 6 numbered waypoint markers
+    // Shared high-clarity label style for the Southern Gulf corridor timeline.
+    // Larger type, solid dark plate, black outline, NO distance shrink, NO glow.
+    const clearLabel = (text, fillCss, bgCss, opts = {}) => ({
+      text,
+      font: opts.font || '900 22px Inter, Segoe UI, sans-serif',
+      fillColor: C.Color.fromCssColorString(fillCss),
+      outlineColor: C.Color.BLACK,
+      outlineWidth: 4,
+      style: C.LabelStyle.FILL_AND_OUTLINE,
+      showBackground: true,
+      backgroundColor: C.Color.fromCssColorString(bgCss).withAlpha(0.98),
+      backgroundPadding: new C.Cartesian2(14, 10),
+      pixelOffset: opts.pixelOffset || new C.Cartesian2(0, -34),
+      disableDepthTestDistance: Number.POSITIVE_INFINITY,
+      // Keep labels large even at corridor overview distance (no blurry shrink)
+      scaleByDistance: new C.NearFarScalar(80_000, 1.25, 2_000_000, 0.95),
+      translucencyByDistance: undefined,
+    });
+
+    // 6 numbered waypoint markers (horizontal corridor timeline nodes)
     this.waypointEntities = CORRIDOR.waypoints.map((w, i) => v.entities.add({
       id: `wp-${i}`,
       position: carto(w.lon, w.lat, this._altAt(i / (CORRIDOR.waypoints.length - 1)) + 200),
-      point: { pixelSize: 11, color: C.Color.fromCssColorString(BRAND.accent), outlineColor: C.Color.WHITE, outlineWidth: 2, disableDepthTestDistance: Number.POSITIVE_INFINITY },
-      label: {
-        text: `${w.legOrder}  ${w.name}`,
-        font: '800 18px Inter, Segoe UI, sans-serif',
-        fillColor: C.Color.fromCssColorString('#F2FFF8'),
-        showBackground: true,
-        backgroundColor: C.Color.fromCssColorString('#0A0E13').withAlpha(0.96),
-        backgroundPadding: new C.Cartesian2(12, 8),
-        pixelOffset: new C.Cartesian2(0, -30),
-        style: C.LabelStyle.FILL,
+      point: {
+        pixelSize: 14,
+        color: C.Color.fromCssColorString(BRAND.accent),
+        outlineColor: C.Color.WHITE,
+        outlineWidth: 3,
         disableDepthTestDistance: Number.POSITIVE_INFINITY,
-        scaleByDistance: new C.NearFarScalar(60000, 1.15, 1_400_000, 0.65),
       },
+      label: clearLabel(
+        `${w.legOrder}  ${w.name}`,
+        '#FFFFFF',
+        '#05070a',
+        { font: '900 22px Inter, Segoe UI, sans-serif' },
+      ),
       _wp: w,
     }));
 
@@ -748,16 +767,28 @@ export default class CesiumScene {
       id: 'launch-site',
       position: carto(LAUNCH_SITE.lon, LAUNCH_SITE.lat, LAUNCH_SITE.height),
       billboard: { image: MARKER_URIS.launch, width: 40, height: 47, verticalOrigin: C.VerticalOrigin.BOTTOM, disableDepthTestDistance: Number.POSITIVE_INFINITY },
-      label: { text: 'CORRIDOR ORIGIN · BANDAR ABBAS', font: '800 17px Inter, Segoe UI, sans-serif', fillColor: C.Color.fromCssColorString('#FFE8E0'), showBackground: true, backgroundColor: C.Color.fromCssColorString('#1A0A08').withAlpha(0.96), backgroundPadding: new C.Cartesian2(12, 8), pixelOffset: new C.Cartesian2(0, 18), disableDepthTestDistance: Number.POSITIVE_INFINITY },
+      label: clearLabel(
+        'CORRIDOR ORIGIN · BANDAR ABBAS',
+        '#FFE8E0',
+        '#1A0A08',
+        { font: '900 20px Inter, Segoe UI, sans-serif', pixelOffset: new C.Cartesian2(0, 22) },
+      ),
       _site: LAUNCH_SITE,
     });
 
-    // impact site billboard
+    // impact site billboard — daytime STRIKE IMPACT caption (not a night clock time)
+    const impactCaption = (TIMELINE && TIMELINE.impactCaption) || 'STRIKE IMPACT · DAYTIME';
+    const framingLabel = (TIMELINE && TIMELINE.framingLabel) || 'DAYTIME · JUNE';
     v.entities.add({
       id: 'impact-site',
       position: carto(IMPACT_SITE.lon, IMPACT_SITE.lat, IMPACT_SITE.height),
-      billboard: { image: MARKER_URIS.impact, width: 40, height: 47, verticalOrigin: C.VerticalOrigin.BOTTOM, disableDepthTestDistance: Number.POSITIVE_INFINITY },
-      label: { text: 'WARDA / JENNA SITE · RECONSTRUCTION', font: '900 18px Inter, Segoe UI, sans-serif', fillColor: C.Color.fromCssColorString('#F5E6FF'), showBackground: true, backgroundColor: C.Color.fromCssColorString('#1A0A24').withAlpha(0.97), backgroundPadding: new C.Cartesian2(14, 9), pixelOffset: new C.Cartesian2(0, 18), disableDepthTestDistance: Number.POSITIVE_INFINITY },
+      billboard: { image: MARKER_URIS.impact, width: 44, height: 52, verticalOrigin: C.VerticalOrigin.BOTTOM, disableDepthTestDistance: Number.POSITIVE_INFINITY },
+      label: clearLabel(
+        `${impactCaption}\n${framingLabel} · WARDA / JENNA`,
+        '#F8E8FF',
+        '#1A0A24',
+        { font: '900 22px Inter, Segoe UI, sans-serif', pixelOffset: new C.Cartesian2(0, 24) },
+      ),
       _site: IMPACT_SITE,
     });
 
@@ -782,7 +813,12 @@ export default class CesiumScene {
       v.entities.add({
         position: carto(this._geofenceCross.lon, this._geofenceCross.lat, this._altAt(this._geofenceCross.t) + 200),
         point: { pixelSize: 10, color: C.Color.fromCssColorString(BRAND.warn), outlineColor: C.Color.BLACK, outlineWidth: 2, disableDepthTestDistance: Number.POSITIVE_INFINITY },
-        label: { text: 'EARLY-WARNING RING · +8.2 min detection lead', font: '800 16px Inter, Segoe UI, sans-serif', fillColor: C.Color.fromCssColorString('#FFF4CC'), showBackground: true, backgroundColor: C.Color.fromCssColorString('#2A2000').withAlpha(0.96), backgroundPadding: new C.Cartesian2(12, 8), pixelOffset: new C.Cartesian2(0, -28), disableDepthTestDistance: Number.POSITIVE_INFINITY },
+        label: clearLabel(
+          'EARLY-WARNING RING · +8.2 min detection lead',
+          '#FFF4CC',
+          '#2A2000',
+          { font: '900 18px Inter, Segoe UI, sans-serif', pixelOffset: new C.Cartesian2(0, -32) },
+        ),
       });
     }
   }
@@ -853,15 +889,18 @@ export default class CesiumScene {
         show: new C.CallbackProperty(() => this._modelFailed === true, false),
       },
       label: {
-        text: 'AIRFRAME TRACK · AWARENESS',
-        font: '800 16px Inter, Segoe UI, sans-serif',
-        fillColor: C.Color.fromCssColorString('#E8FFF5'),
+        text: 'AIRFRAME TRACK · DAYTIME',
+        font: '900 18px Inter, Segoe UI, sans-serif',
+        fillColor: C.Color.fromCssColorString('#FFFFFF'),
+        outlineColor: C.Color.BLACK,
+        outlineWidth: 3,
+        style: C.LabelStyle.FILL_AND_OUTLINE,
         showBackground: true,
-        backgroundColor: C.Color.fromCssColorString('#0A0E13').withAlpha(0.96),
-        backgroundPadding: new C.Cartesian2(12, 7),
-        pixelOffset: new C.Cartesian2(0, 28),
+        backgroundColor: C.Color.fromCssColorString('#0A0E13').withAlpha(0.98),
+        backgroundPadding: new C.Cartesian2(12, 8),
+        pixelOffset: new C.Cartesian2(0, 30),
         disableDepthTestDistance: Number.POSITIVE_INFINITY,
-        scaleByDistance: new C.NearFarScalar(40000, 1.1, 500000, 0.5),
+        scaleByDistance: new C.NearFarScalar(50_000, 1.15, 800_000, 0.9),
       },
     });
 

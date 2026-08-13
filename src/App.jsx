@@ -4,6 +4,7 @@ import { mountShahedInspector } from './three/Shahed136.js';
 import { SHAHED_SPECS } from './utils/geo.js';
 import {
   META, IMPACT_SITE, CORRIDOR_ORIGIN, CORRIDOR, GEOFENCE, STATS, CAMERA_MODES,
+  TIMELINE,
   analyzeThermal, VIIRS_DETECTIONS, INTEL, IMAGERY,
 } from './data/scenario.js';
 import {
@@ -216,9 +217,13 @@ export default function App() {
       <div ref={cesiumRef} className="cesium-host" />
       {thermal && <div className="thermal-overlay" />}
 
-      {/* Dark-theme corridor watch diagram (matches original geospatial aesthetic) */}
+      {/* Dark-theme corridor watch diagram — high-clarity Southern Gulf timeline */}
       <div className="corridor-overlay" aria-label="Al Warqa corridor watch nodes">
-        <div className="co-header">3 · SOUTHERN GULF → UAE COAST · TACTICAL CORRIDOR<br/><span style={{fontSize:"13px",color:"#c8d0d8",fontWeight:800}}>WATCH NODES · ILLUSTRATIVE RECONSTRUCTION</span></div>
+        <div className="co-header">
+          <span className="co-header-main">3 · SOUTHERN GULF → UAE COAST · TACTICAL CORRIDOR</span>
+          <span className="co-header-sub">WATCH NODES · ILLUSTRATIVE RECONSTRUCTION</span>
+          <span className="co-header-day">{TIMELINE?.framingLabel || 'DAYTIME · JUNE'} · DEFENSIVE BRIEFING</span>
+        </div>
         <div className="co-body">
           <div className="co-route" />
           <div className="co-scan" />
@@ -240,6 +245,10 @@ export default function App() {
               </span>
             </button>
           ))}
+          {/* Magenta strike-impact caption under the corridor axis (daytime framing, not clock time) */}
+          <div className="co-strike-caption" role="note">
+            {TIMELINE?.impactCaption || 'STRIKE IMPACT · DAYTIME'}
+          </div>
         </div>
         {hoverNode && (
           <div className="co-tip">{WATCH_NODES.find((n) => n.id === hoverNode)?.tip}</div>
