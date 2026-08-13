@@ -345,14 +345,16 @@ export const CAMERA_MODES = [
 // (not an operational clock-time / night strike depiction).
 export const TIMELINE = {
   flightSeconds: 48, // sim seconds for a full launch→impact replay at 1x
-  // Daytime framing (Gulf morning): 06:30Z ≈ 10:30 GST — high sun, clear labels.
-  // Previously 21 (night clock) which made the strike read as an unclear night time.
-  startHour: 6,
-  startMinute: 30,
-  dayIso: '2025-06-21T06:30:00Z',
+  // Midday framing (Gulf noon): 08:00Z ≈ 12:00 GST — high sun, max label contrast.
+  // v1 used 06:30Z morning; night clock (startHour 21) is explicitly retired.
+  startHour: 8,
+  startMinute: 0,
+  dayIso: '2025-06-21T08:00:00Z',
   framing: 'daytime',
   framingLabel: 'DAYTIME · JUNE',
   impactCaption: 'STRIKE IMPACT · DAYTIME',
+  // Locked presentation clock — Cesium must not animate into night.
+  lockClock: true,
 };
 
 export default {

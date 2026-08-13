@@ -221,7 +221,7 @@ export default function App() {
       <div className="corridor-overlay" aria-label="Al Warqa corridor watch nodes">
         <div className="co-header">
           <span className="co-header-main">3 · SOUTHERN GULF → UAE COAST · TACTICAL CORRIDOR</span>
-          <span className="co-header-sub">WATCH NODES · ILLUSTRATIVE RECONSTRUCTION</span>
+          <span className="co-header-sub">TANKER / UAE COAST · WATCH NODES · ILLUSTRATIVE</span>
           <span className="co-header-day">{TIMELINE?.framingLabel || 'DAYTIME · JUNE'} · DEFENSIVE BRIEFING</span>
         </div>
         <div className="co-body">
