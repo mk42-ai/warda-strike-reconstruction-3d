@@ -341,9 +341,18 @@ export const CAMERA_MODES = [
 ];
 
 // ---- Timeline ---------------------------------------------------------------
+// Presentation framing is DAYTIME for defensive reconstruction readability
+// (not an operational clock-time / night strike depiction).
 export const TIMELINE = {
   flightSeconds: 48, // sim seconds for a full launch→impact replay at 1x
-  startHour: 21, // strike acquired ~21:55Z (matches VIIRS night detections)
+  // Daytime framing (Gulf morning): 06:30Z ≈ 10:30 GST — high sun, clear labels.
+  // Previously 21 (night clock) which made the strike read as an unclear night time.
+  startHour: 6,
+  startMinute: 30,
+  dayIso: '2025-06-21T06:30:00Z',
+  framing: 'daytime',
+  framingLabel: 'DAYTIME · JUNE',
+  impactCaption: 'STRIKE IMPACT · DAYTIME',
 };
 
 export default {
