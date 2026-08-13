@@ -25,24 +25,25 @@ export function buildShahed136() {
   const group = new THREE.Group();
   group.name = 'Shahed136';
 
-  // ---- materials ----
+  // ---- materials (PBR — MeshStandardMaterial, never MeshBasic/unlit) ----
+  // envMapIntensity lets the PMREM IBL contribute realistic fill/reflections.
   const body = new THREE.MeshStandardMaterial({
-    color: 0xb9c9bd, metalness: 0.35, roughness: 0.55,
+    color: 0xb9c9bd, metalness: 0.42, roughness: 0.48, envMapIntensity: 1.0,
   });
   const bodyDark = new THREE.MeshStandardMaterial({
-    color: 0x8a9b8f, metalness: 0.4, roughness: 0.5,
+    color: 0x8a9b8f, metalness: 0.48, roughness: 0.42, envMapIntensity: 1.0,
   });
   const warhead = new THREE.MeshStandardMaterial({
-    color: 0x6a2a22, metalness: 0.5, roughness: 0.4,
-    emissive: 0x3a0d08, emissiveIntensity: 0.4,
+    color: 0x6a2a22, metalness: 0.55, roughness: 0.36,
+    emissive: 0x3a0d08, emissiveIntensity: 0.45, envMapIntensity: 0.9,
   });
   const sensor = new THREE.MeshStandardMaterial({
-    color: 0x0a0a0a, metalness: 0.9, roughness: 0.15,
-    emissive: 0x113322, emissiveIntensity: 0.6,
+    color: 0x0a0a0a, metalness: 0.92, roughness: 0.12,
+    emissive: 0x113322, emissiveIntensity: 0.65, envMapIntensity: 1.15,
   });
   const accent = new THREE.MeshStandardMaterial({
-    color: 0x7be0ad, metalness: 0.3, roughness: 0.4,
-    emissive: 0x1f7a55, emissiveIntensity: 0.8,
+    color: 0x7be0ad, metalness: 0.35, roughness: 0.36,
+    emissive: 0x1f7a55, emissiveIntensity: 0.9, envMapIntensity: 1.0,
   });
 
   // ---- fuselage (tapered capsule body) ----
@@ -191,14 +192,27 @@ export function mountShahedInspector(container) {
   const model = buildShahed136();
   scene.add(model);
 
-  // ground glow disc
+  // ground contact disc — PBR so it receives IBL/key light (not unlit Basic)
   const disc = new THREE.Mesh(
     new THREE.CircleGeometry(3.2, 48),
-    new THREE.MeshBasicMaterial({ color: 0x0b3d2e, transparent: true, opacity: 0.35 })
+    new THREE.MeshStandardMaterial({
+      color: 0x0b3d2e, transparent: true, opacity: 0.45,
+      roughness: 0.95, metalness: 0.0, envMapIntensity: 0.35,
+    })
   );
   disc.rotation.x = -Math.PI / 2;
   disc.position.y = -1.2;
+  disc.receiveShadow = true;
   scene.add(disc);
+
+  // Soft key shadow so the inspector model grounds against the disc
+  try {
+    key.castShadow = true;
+    key.shadow.mapSize.set(512, 512);
+    renderer.shadowMap.enabled = true;
+    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    model.traverse((o) => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
+  } catch (_) {}
 
   // ── CINEMATIC POST-PROCESSING PIPELINE (pmndrs 'postprocessing') ──────────
   // EffectComposer → RenderPass → EffectPass[ Bloom + SMAA + ACES ToneMapping ].

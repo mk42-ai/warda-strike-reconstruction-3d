@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
 import CesiumScene from './cesium/CesiumScene.js';
 import { mountShahedInspector } from './three/Shahed136.js';
+import { mountDesertScene } from './three/DesertScene.js';
 import { SHAHED_SPECS } from './utils/geo.js';
 import {
   META, IMPACT_SITE, CORRIDOR_ORIGIN, CORRIDOR, GEOFENCE, STATS, CAMERA_MODES,
@@ -28,6 +29,8 @@ export default function App() {
   const cesiumRef = useRef(null);
   const sceneRef = useRef(null);
   const inspectorRef = useRef(null);
+  const desertRef = useRef(null);
+  const desertSceneRef = useRef(null);
 
   const [ready, setReady] = useState(false);
   const [playing, setPlaying] = useState(false);
@@ -40,6 +43,9 @@ export default function App() {
   const [imageryMode, setImageryMode] = useState('satellite');   // 'satellite' (ESRI) | 'dark' (Carto)
   const [clock, setClock] = useState('');                        // live UTC clock for the classification banner
   const [layers, setLayers] = useState({ corridor: true, geofence: true, waypoints: true });
+  // viewMode: 'desert' = Three.js UAE protective desert theatre (visual overhaul)
+  //            'cesium' = full strike corridor globe theatre
+  const [viewMode, setViewMode] = useState('desert');
 
   const thermalReport = analyzeThermal(VIIRS_DETECTIONS);
 
@@ -79,9 +85,22 @@ export default function App() {
     if (boot) setTimeout(() => boot.classList.add('hidden'), 900);
 
     try { if (inspectorRef.current) insp = mountShahedInspector(inspectorRef.current); } catch (_) {}
+
+    // Three.js UAE desert protective theatre (full visual overhaul target)
+    try {
+      if (desertRef.current && !desertSceneRef.current) {
+        desertSceneRef.current = mountDesertScene(desertRef.current);
+      }
+    } catch (e) {
+      // eslint-disable-next-line no-console
+      console.error('[App] DesertScene init failed:', e);
+    }
+
     return () => {
       try { insp && insp.dispose(); } catch (_) {}
       try { scene && scene.destroy(); } catch (_) {}
+      try { desertSceneRef.current && desertSceneRef.current.dispose(); } catch (_) {}
+      desertSceneRef.current = null;
     };
   }, []);
 
@@ -166,9 +185,19 @@ export default function App() {
       {/* full-screen brand HUD frame */}
       <Svg markup={HUD_FRAME} className="hud-frame" />
 
-      {/* Cesium globe */}
-      <div ref={cesiumRef} className="cesium-host" />
-      {thermal && <div className="thermal-overlay" />}
+      {/* Cesium globe (strike corridor theatre) */}
+      <div
+        ref={cesiumRef}
+        className="cesium-host"
+        style={{ visibility: viewMode === 'cesium' ? 'visible' : 'hidden', pointerEvents: viewMode === 'cesium' ? 'auto' : 'none' }}
+      />
+      {/* Three.js UAE desert protective scene (PBR / ACES / PMREM / heat-haze) */}
+      <div
+        ref={desertRef}
+        className="desert-host"
+        style={{ visibility: viewMode === 'desert' ? 'visible' : 'hidden', pointerEvents: viewMode === 'desert' ? 'auto' : 'none' }}
+      />
+      {thermal && viewMode === 'cesium' && <div className="thermal-overlay" />}
 
       {/* top brand bar */}
       <header className="topbar">
@@ -176,6 +205,24 @@ export default function App() {
         <div className="title-block">
           <div className="t1">IMP-08 · WARDA APARTMENTS STRIKE RECONSTRUCTION</div>
           <div className="t2">{META.munition} · Iran→Dubai corridor · {META.operation} · real-satellite 3D theatre</div>
+        </div>
+        <div className="view-toggle" role="group" aria-label="Scene view">
+          <button
+            type="button"
+            className={`vt-btn ${viewMode === 'desert' ? 'on' : ''}`}
+            onClick={() => setViewMode('desert')}
+            title="UAE desert protective Three.js theatre"
+          >
+            DESERT 3D
+          </button>
+          <button
+            type="button"
+            className={`vt-btn ${viewMode === 'cesium' ? 'on' : ''}`}
+            onClick={() => setViewMode('cesium')}
+            title="Iran→Dubai Cesium strike corridor"
+          >
+            CORRIDOR
+          </button>
         </div>
         <div className="badge">
           <span className="dot" /> {ready ? 'LIVE' : 'INIT'}

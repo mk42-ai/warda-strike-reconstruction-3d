@@ -69,6 +69,56 @@ body {
 .cesium-host { position: absolute; inset: var(--cls-h) 0 0 0; }
 .cesium-host .cesium-viewer-bottom, .cesium-host .cesium-widget-credits { display: none !important; }
 
+/* Three.js UAE desert protective theatre — full-viewport canvas host */
+.desert-host {
+  position: absolute;
+  inset: var(--cls-h) 0 0 0;
+  z-index: 1;
+  overflow: hidden;
+  background:
+    radial-gradient(ellipse at 50% 18%, #9ec8f0 0%, #6a9fd4 38%, #c9a86c 100%);
+}
+.desert-host canvas {
+  display: block;
+  width: 100% !important;
+  height: 100% !important;
+  outline: none;
+  touch-action: none;
+}
+
+/* View toggle: DESERT 3D ↔ CORRIDOR (Cesium) */
+.view-toggle {
+  display: inline-flex;
+  align-items: stretch;
+  margin-left: auto;
+  margin-right: 4px;
+  border: 1px solid var(--panel-bd-strong);
+  border-radius: 8px;
+  overflow: hidden;
+  background: rgba(5, 7, 10, 0.55);
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.35) inset;
+}
+.vt-btn {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  color: var(--ink-dim);
+  font-family: var(--mono);
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 1px;
+  padding: 7px 12px;
+  cursor: pointer;
+  transition: background .15s ease, color .15s ease;
+}
+.vt-btn + .vt-btn { border-left: 1px solid var(--hair); }
+.vt-btn:hover { color: var(--ink); background: rgba(78, 227, 155, 0.08); }
+.vt-btn.on {
+  color: var(--primary-deep);
+  background: linear-gradient(180deg, var(--accent) 0%, var(--accent2) 100%);
+  text-shadow: none;
+}
+
 /* brand HUD frame overlay */
 .hud-frame { position: absolute; inset: 0; pointer-events: none; z-index: 40; }
 .hud-frame svg { width: 100%; height: 100%; display: block; }
