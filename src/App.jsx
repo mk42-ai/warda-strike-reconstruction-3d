@@ -4,7 +4,6 @@ import { mountShahedInspector } from './three/Shahed136.js';
 import { SHAHED_SPECS } from './utils/geo.js';
 import {
   META, IMPACT_SITE, CORRIDOR_ORIGIN, CORRIDOR, GEOFENCE, STATS, CAMERA_MODES,
-  TIMELINE,
   analyzeThermal, VIIRS_DETECTIONS, INTEL, IMAGERY,
 } from './data/scenario.js';
 import {
@@ -42,7 +41,6 @@ export default function App() {
   const [clock, setClock] = useState('');                        // live UTC clock for the classification banner
   const [layers, setLayers] = useState({ corridor: true, geofence: true, waypoints: true });
   const [scenarioId, setScenarioId] = useState('baseline_monitor');
-  const [hoverNode, setHoverNode] = useState(null);
 
   // Illustrative resilience scenario chips (NOT confirmed intelligence)
   const SCENARIOS = [
@@ -52,23 +50,6 @@ export default function App() {
     { id: 'multi_node_lag', name: 'Multi-node lag', det: 16.8, resp: 57.9, disr: 0.83, rec: 8.9, risk: 0.49 },
   ];
   const scenario = SCENARIOS.find((s) => s.id === scenarioId) || SCENARIOS[0];
-  // Blend illustrative KPIs with live progress so tiles update while the sim runs
-  const ease = progress * progress * (3 - 2 * progress);
-  const kpis = {
-    det: +(5.5 + (scenario.det - 5.5) * ease).toFixed(1),
-    resp: +(12 + (scenario.resp - 12) * ease).toFixed(1),
-    disr: +(0.05 + (scenario.disr - 0.05) * ease).toFixed(2),
-    rec: +(2.0 + (scenario.rec - 2.0) * ease).toFixed(1),
-    risk: +(0.04 + (scenario.risk - 0.04) * ease).toFixed(2),
-  };
-  const riskChip = kpis.risk >= 0.35 ? 'CONTAIN' : kpis.risk >= 0.15 ? 'MONITOR' : 'RESTORE';
-
-  const WATCH_NODES = [
-    { id: 'ORIGIN', label: 'ORIGIN', y: 12, tip: `Corridor origin ${CORRIDOR_ORIGIN.lat}, ${CORRIDOR_ORIGIN.lon}` },
-    { id: 'MWR-APT', label: 'MWR-APT', y: 38, tip: 'Municipal watch node (assumed role) — ILLUSTRATIVE' },
-    { id: 'SWM', label: 'SWM', y: 64, tip: 'Sector warning link (assumed) — ILLUSTRATIVE' },
-    { id: 'SITE', label: 'SITE', y: 90, tip: `${IMPACT_SITE.address} · ${IMPACT_SITE.lat}, ${IMPACT_SITE.lon}` },
-  ];
 
   const thermalReport = analyzeThermal(VIIRS_DETECTIONS);
 
@@ -216,67 +197,6 @@ export default function App() {
       {/* Cesium globe */}
       <div ref={cesiumRef} className="cesium-host" />
       {thermal && <div className="thermal-overlay" />}
-
-      {/* Dark-theme corridor watch diagram — v3 high-clarity Southern Gulf timeline */}
-      <div className="corridor-overlay" aria-label="Al Warqa corridor watch nodes — daytime strike">
-        <div className="co-header">
-          <span className="co-header-kicker">{TIMELINE?.eventTitle || TIMELINE?.framingLabel || 'DAYTIME STRIKE'}</span>
-          <span className="co-header-main">3 · SOUTHERN GULF → UAE COAST · TACTICAL CORRIDOR</span>
-          <span className="co-header-sub">TANKER / UAE COAST · WATCH NODES · ILLUSTRATIVE</span>
-          <span className="co-header-day">DEFENSIVE BRIEFING · DAYLIGHT RECONSTRUCTION</span>
-          <span className="co-header-clock">{TIMELINE?.secondaryClockLabel || 'MIDDAY LOCAL · 12:00 GST'}</span>
-        </div>
-        <div className="co-body">
-          <div className="co-amber-band" aria-hidden="true" />
-          <div className="co-route" />
-          <div className="co-scan" />
-          <div className="co-playhead" style={{ top: `${8 + progress * 78}%` }} title="Status" />
-          {/* Yellow status marker (center-right of timeline) */}
-          <span className="co-status-dot" style={{ top: `${8 + progress * 78}%` }} aria-hidden="true" />
-          {WATCH_NODES.map((n) => (
-            <button
-              key={n.id}
-              type="button"
-              className={`co-node ${hoverNode === n.id ? 'on' : ''} ${n.id === 'SITE' ? 'co-node-primary' : ''}`}
-              style={{ top: `${n.y}%` }}
-              title={n.tip}
-              onMouseEnter={() => setHoverNode(n.id)}
-              onMouseLeave={() => setHoverNode(null)}
-              onClick={() => setHoverNode(n.id)}
-            >
-              <span className="co-dot" />
-              <span className={`co-plate ${n.id === 'MWR-APT' ? 'slate' : n.id === 'SWM' || n.id === 'SITE' ? 'mint' : ''}`}>
-                {n.id === 'MWR-APT' ? 'MWR-APT NODE' : n.id === 'SWM' ? 'SWM LINK' : n.id === 'SITE' ? 'WARDA / JENNA · SITE' : 'ORIGIN'}
-              </span>
-            </button>
-          ))}
-          {/* Magenta strike-impact caption — DAYLIGHT rename (not night clock) */}
-          <div className="co-strike-caption" role="note">
-            <span className="co-strike-title">{TIMELINE?.eventTitle || 'DAYTIME STRIKE'}</span>
-            <span className="co-strike-impact">{TIMELINE?.impactCaption || 'STRIKE IMPACT — DAYLIGHT'}</span>
-          </div>
-        </div>
-        {hoverNode && (
-          <div className="co-tip">{WATCH_NODES.find((n) => n.id === hoverNode)?.tip}</div>
-        )}
-      </div>
-
-      {/* Illustrative KPI plates — update while sim runs */}
-      <div className="kpi-strip" role="region" aria-label="Illustrative resilience metrics">
-        {[
-          { t: 'DETECTION TIME', v: kpis.det, u: 'min' },
-          { t: 'RESPONSE TIME', v: kpis.resp, u: 'min' },
-          { t: 'DISRUPTION', v: kpis.disr, u: '' },
-          { t: 'RECOVERY', v: kpis.rec, u: 'h' },
-          { t: 'RESIDUAL RISK', v: kpis.risk, u: '' },
-        ].map((m) => (
-          <div key={m.t} className="kpi-card">
-            <div className="kpi-t">{m.t}</div>
-            <div className="kpi-v">{m.v}<span className="kpi-u">{m.u}</span></div>
-          </div>
-        ))}
-        <div className={`kpi-chip st-${riskChip.toLowerCase()}`}>{riskChip}</div>
-      </div>
 
       {/* top brand bar */}
       <header className="topbar">
