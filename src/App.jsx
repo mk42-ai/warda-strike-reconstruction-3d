@@ -217,22 +217,27 @@ export default function App() {
       <div ref={cesiumRef} className="cesium-host" />
       {thermal && <div className="thermal-overlay" />}
 
-      {/* Dark-theme corridor watch diagram — high-clarity Southern Gulf timeline */}
-      <div className="corridor-overlay" aria-label="Al Warqa corridor watch nodes">
+      {/* Dark-theme corridor watch diagram — v3 high-clarity Southern Gulf timeline */}
+      <div className="corridor-overlay" aria-label="Al Warqa corridor watch nodes — daytime strike">
         <div className="co-header">
+          <span className="co-header-kicker">{TIMELINE?.eventTitle || TIMELINE?.framingLabel || 'DAYTIME STRIKE'}</span>
           <span className="co-header-main">3 · SOUTHERN GULF → UAE COAST · TACTICAL CORRIDOR</span>
           <span className="co-header-sub">TANKER / UAE COAST · WATCH NODES · ILLUSTRATIVE</span>
-          <span className="co-header-day">{TIMELINE?.framingLabel || 'DAYTIME · JUNE'} · DEFENSIVE BRIEFING</span>
+          <span className="co-header-day">DEFENSIVE BRIEFING · DAYLIGHT RECONSTRUCTION</span>
+          <span className="co-header-clock">{TIMELINE?.secondaryClockLabel || 'MIDDAY LOCAL · 12:00 GST'}</span>
         </div>
         <div className="co-body">
+          <div className="co-amber-band" aria-hidden="true" />
           <div className="co-route" />
           <div className="co-scan" />
-          <div className="co-playhead" style={{ top: `${8 + progress * 78}%` }} />
+          <div className="co-playhead" style={{ top: `${8 + progress * 78}%` }} title="Status" />
+          {/* Yellow status marker (center-right of timeline) */}
+          <span className="co-status-dot" style={{ top: `${8 + progress * 78}%` }} aria-hidden="true" />
           {WATCH_NODES.map((n) => (
             <button
               key={n.id}
               type="button"
-              className={`co-node ${hoverNode === n.id ? 'on' : ''}`}
+              className={`co-node ${hoverNode === n.id ? 'on' : ''} ${n.id === 'SITE' ? 'co-node-primary' : ''}`}
               style={{ top: `${n.y}%` }}
               title={n.tip}
               onMouseEnter={() => setHoverNode(n.id)}
@@ -245,9 +250,10 @@ export default function App() {
               </span>
             </button>
           ))}
-          {/* Magenta strike-impact caption under the corridor axis (daytime framing, not clock time) */}
+          {/* Magenta strike-impact caption — DAYLIGHT rename (not night clock) */}
           <div className="co-strike-caption" role="note">
-            {TIMELINE?.impactCaption || 'STRIKE IMPACT · DAYTIME'}
+            <span className="co-strike-title">{TIMELINE?.eventTitle || 'DAYTIME STRIKE'}</span>
+            <span className="co-strike-impact">{TIMELINE?.impactCaption || 'STRIKE IMPACT — DAYLIGHT'}</span>
           </div>
         </div>
         {hoverNode && (
