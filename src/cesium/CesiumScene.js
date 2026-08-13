@@ -361,7 +361,7 @@ export default class CesiumScene {
       scene.globe.lightingFadeInDistance = 20_000.0;
       scene.globe.nightFadeOutDistance = 40_000.0;
       scene.globe.atmosphereScatteringIntensity = 2.6;
-      if (scene.light) scene.light.intensity = 3.0;             // sun intensity
+      if (scene.light) scene.light.intensity = 4.2;             // sun intensity
       if ('imageBasedLighting' in scene && scene.imageBasedLighting) {
         scene.imageBasedLighting.imageBasedLightingFactor = new C.Cartesian2(1.0, 1.0);
         scene.imageBasedLighting.luminanceAtZenith = 0.5;       // ambient IBL fill
@@ -374,7 +374,7 @@ export default class CesiumScene {
     scene.globe.preloadSiblings = true;            // fewer holes while moving
     // tuned distance fog → depth cue without washing the corridor out
     scene.fog.enabled = true;
-    scene.fog.density = 0.00012;
+    scene.fog.density = 0.00004; // near-clear daytime haze
     scene.fog.screenSpaceErrorFactor = 4.0;
     scene.skyAtmosphere.show = true;
     scene.skyAtmosphere.atmosphereLightIntensity = 18.0;
@@ -396,13 +396,14 @@ export default class CesiumScene {
     try {
       const bloom = scene.postProcessStages.bloom;
       if (bloom) {
-        bloom.enabled = true;
+        // OFF for label clarity — glow was smearing Cesium callouts (Southern Gulf / WARDA IMPACT)
+        bloom.enabled = false;
         bloom.uniforms.glowOnly = false;
-        bloom.uniforms.contrast = 128;
-        bloom.uniforms.brightness = -0.2;
-        bloom.uniforms.delta = 1.0;
-        bloom.uniforms.sigma = 2.6;
-        bloom.uniforms.stepSize = 1.0;
+        bloom.uniforms.contrast = 90;
+        bloom.uniforms.brightness = -0.35;
+        bloom.uniforms.delta = 0.8;
+        bloom.uniforms.sigma = 1.4;
+        bloom.uniforms.stepSize = 0.8;
       }
     } catch (_) { /* bloom unavailable on this GPU → skip glow */ }
 
@@ -511,7 +512,7 @@ export default class CesiumScene {
       // Fixed mid-MORNING daylight (summer-solstice sun, ~09:30Z). Stored on the
       // instance so EVERY camera mode / play / thermal toggle can re-assert it
       // via _applyDaylight() and the lighting can never flip to night.
-      this._dayIso = '2025-06-21T09:30:00Z';
+      this._dayIso = '2025-06-21T06:30:00Z'; // ~10:30 GST — high sun over Dubai
       this._applyDaylight();
       // Make the sun the lighting source and ensure globe lighting is on so the
       // daylight actually reaches terrain/imagery in every mode.
@@ -519,10 +520,10 @@ export default class CesiumScene {
       if (scene.moon) scene.moon.show = false;
       scene.globe.enableLighting = true;
       // brighten the lit side so captured imagery never reads muddy/black
-      scene.globe.atmosphereLightIntensity = 20.0;
+      scene.globe.atmosphereLightIntensity = 28.0;
       if (scene.light) {
         scene.light = new C.SunLight();        // explicit physically based sun
-        scene.light.intensity = 3.0;
+        scene.light.intensity = 4.2;
       }
     } catch (_) { /* keep default clock/lighting if anything is unavailable */ }
 
@@ -547,11 +548,27 @@ export default class CesiumScene {
       scene.globe.enableLighting = true;                 // sun lighting in EVERY mode
       if (scene.sun) scene.sun.show = true;
       if (scene.moon) scene.moon.show = false;
-      if (scene.skyAtmosphere) scene.skyAtmosphere.show = true;
-      if (scene.fog) scene.fog.enabled = true;
+      if (scene.skyAtmosphere) {
+        scene.skyAtmosphere.show = true;
+        try { scene.skyAtmosphere.atmosphereLightIntensity = 28.0; } catch (_) {}
+      }
+      // Daytime: light haze only — keep horizon readable, not night fog
+      if (scene.fog) {
+        scene.fog.enabled = true;
+        scene.fog.density = 0.00004;
+      }
       scene.globe.showGroundAtmosphere = true;
+      try { scene.globe.atmosphereLightIntensity = 28.0; } catch (_) {}
       // keep a physically based sun light (not a fixed flashlight at the camera)
-      try { if (!(scene.light instanceof C.SunLight)) { scene.light = new C.SunLight(); scene.light.intensity = 3.0; } } catch (_) {}
+      try {
+        if (!(scene.light instanceof C.SunLight)) scene.light = new C.SunLight();
+        scene.light.intensity = 4.2;
+      } catch (_) {}
+      // Keep bloom OFF so globe labels stay sharp in daytime reconstruction
+      try {
+        const bloom = scene.postProcessStages && scene.postProcessStages.bloom;
+        if (bloom) bloom.enabled = false;
+      } catch (_) {}
     } catch (_) { /* never let a lighting refresh break a mode switch */ }
   }
 
@@ -694,7 +711,7 @@ export default class CesiumScene {
       polyline: {
         positions: C.Cartesian3.fromDegreesArrayHeights(arcPos),
         width: 3.0,
-        material: new C.PolylineGlowMaterialProperty({ glowPower: 0.28, color: C.Color.fromCssColorString(BRAND.accent) }),
+        material: C.Color.fromCssColorString('#9FE8C8').withAlpha(0.95), // solid — no glow smear under labels
       },
     });
     // ground shadow track
@@ -713,15 +730,15 @@ export default class CesiumScene {
       point: { pixelSize: 11, color: C.Color.fromCssColorString(BRAND.accent), outlineColor: C.Color.WHITE, outlineWidth: 2, disableDepthTestDistance: Number.POSITIVE_INFINITY },
       label: {
         text: `${w.legOrder}  ${w.name}`,
-        font: '600 14px Segoe UI, sans-serif',
-        fillColor: C.Color.WHITE,
+        font: '800 18px Inter, Segoe UI, sans-serif',
+        fillColor: C.Color.fromCssColorString('#F2FFF8'),
         showBackground: true,
-        backgroundColor: C.Color.fromCssColorString(BRAND.primary).withAlpha(0.82),
-        backgroundPadding: new C.Cartesian2(8, 5),
-        pixelOffset: new C.Cartesian2(0, -26),
+        backgroundColor: C.Color.fromCssColorString('#0A0E13').withAlpha(0.96),
+        backgroundPadding: new C.Cartesian2(12, 8),
+        pixelOffset: new C.Cartesian2(0, -30),
         style: C.LabelStyle.FILL,
         disableDepthTestDistance: Number.POSITIVE_INFINITY,
-        scaleByDistance: new C.NearFarScalar(60000, 1.0, 1_400_000, 0.4),
+        scaleByDistance: new C.NearFarScalar(60000, 1.15, 1_400_000, 0.65),
       },
       _wp: w,
     }));
@@ -731,7 +748,7 @@ export default class CesiumScene {
       id: 'launch-site',
       position: carto(LAUNCH_SITE.lon, LAUNCH_SITE.lat, LAUNCH_SITE.height),
       billboard: { image: MARKER_URIS.launch, width: 40, height: 47, verticalOrigin: C.VerticalOrigin.BOTTOM, disableDepthTestDistance: Number.POSITIVE_INFINITY },
-      label: { text: 'IRAN LAUNCH SITE', font: '700 13px Segoe UI', fillColor: C.Color.fromCssColorString('#ff8a7a'), showBackground: true, backgroundColor: C.Color.fromCssColorString('#2a0c08').withAlpha(0.85), pixelOffset: new C.Cartesian2(0, 14), disableDepthTestDistance: Number.POSITIVE_INFINITY },
+      label: { text: 'CORRIDOR ORIGIN · BANDAR ABBAS', font: '800 17px Inter, Segoe UI, sans-serif', fillColor: C.Color.fromCssColorString('#FFE8E0'), showBackground: true, backgroundColor: C.Color.fromCssColorString('#1A0A08').withAlpha(0.96), backgroundPadding: new C.Cartesian2(12, 8), pixelOffset: new C.Cartesian2(0, 18), disableDepthTestDistance: Number.POSITIVE_INFINITY },
       _site: LAUNCH_SITE,
     });
 
@@ -740,7 +757,7 @@ export default class CesiumScene {
       id: 'impact-site',
       position: carto(IMPACT_SITE.lon, IMPACT_SITE.lat, IMPACT_SITE.height),
       billboard: { image: MARKER_URIS.impact, width: 40, height: 47, verticalOrigin: C.VerticalOrigin.BOTTOM, disableDepthTestDistance: Number.POSITIVE_INFINITY },
-      label: { text: 'WARDA APTS · IMPACT', font: '700 13px Segoe UI', fillColor: C.Color.fromCssColorString('#e0b3ff'), showBackground: true, backgroundColor: C.Color.fromCssColorString('#1a0a1f').withAlpha(0.85), pixelOffset: new C.Cartesian2(0, 14), disableDepthTestDistance: Number.POSITIVE_INFINITY },
+      label: { text: 'WARDA / JENNA SITE · RECONSTRUCTION', font: '900 18px Inter, Segoe UI, sans-serif', fillColor: C.Color.fromCssColorString('#F5E6FF'), showBackground: true, backgroundColor: C.Color.fromCssColorString('#1A0A24').withAlpha(0.97), backgroundPadding: new C.Cartesian2(14, 9), pixelOffset: new C.Cartesian2(0, 18), disableDepthTestDistance: Number.POSITIVE_INFINITY },
       _site: IMPACT_SITE,
     });
 
@@ -765,7 +782,7 @@ export default class CesiumScene {
       v.entities.add({
         position: carto(this._geofenceCross.lon, this._geofenceCross.lat, this._altAt(this._geofenceCross.t) + 200),
         point: { pixelSize: 10, color: C.Color.fromCssColorString(BRAND.warn), outlineColor: C.Color.BLACK, outlineWidth: 2, disableDepthTestDistance: Number.POSITIVE_INFINITY },
-        label: { text: 'GEOFENCE TRIPWIRE · +8.2 min warning', font: '600 12px Segoe UI', fillColor: C.Color.fromCssColorString(BRAND.warn), showBackground: true, backgroundColor: C.Color.fromCssColorString('#2a2400').withAlpha(0.85), pixelOffset: new C.Cartesian2(0, -22), disableDepthTestDistance: Number.POSITIVE_INFINITY },
+        label: { text: 'EARLY-WARNING RING · +8.2 min detection lead', font: '800 16px Inter, Segoe UI, sans-serif', fillColor: C.Color.fromCssColorString('#FFF4CC'), showBackground: true, backgroundColor: C.Color.fromCssColorString('#2A2000').withAlpha(0.96), backgroundPadding: new C.Cartesian2(12, 8), pixelOffset: new C.Cartesian2(0, -28), disableDepthTestDistance: Number.POSITIVE_INFINITY },
       });
     }
   }
@@ -836,11 +853,15 @@ export default class CesiumScene {
         show: new C.CallbackProperty(() => this._modelFailed === true, false),
       },
       label: {
-        text: 'SHAHED-136 · OWA',
-        font: '600 12px Segoe UI', fillColor: C.Color.fromCssColorString(BRAND.accent),
-        showBackground: true, backgroundColor: C.Color.fromCssColorString(BRAND.primary).withAlpha(0.8),
-        pixelOffset: new C.Cartesian2(0, 26), disableDepthTestDistance: Number.POSITIVE_INFINITY,
-        scaleByDistance: new C.NearFarScalar(40000, 1.0, 500000, 0.0),
+        text: 'AIRFRAME TRACK · AWARENESS',
+        font: '800 16px Inter, Segoe UI, sans-serif',
+        fillColor: C.Color.fromCssColorString('#E8FFF5'),
+        showBackground: true,
+        backgroundColor: C.Color.fromCssColorString('#0A0E13').withAlpha(0.96),
+        backgroundPadding: new C.Cartesian2(12, 7),
+        pixelOffset: new C.Cartesian2(0, 28),
+        disableDepthTestDistance: Number.POSITIVE_INFINITY,
+        scaleByDistance: new C.NearFarScalar(40000, 1.1, 500000, 0.5),
       },
     });
 
@@ -861,7 +882,7 @@ export default class CesiumScene {
       polyline: {
         positions: new C.CallbackProperty(() => this._trail, false),
         width: 3.0,
-        material: new C.PolylineGlowMaterialProperty({ glowPower: 0.5, color: C.Color.fromCssColorString('#ff7a18') }),
+        material: C.Color.fromCssColorString('#ff9a4a').withAlpha(0.92), // solid trail for clarity
       },
     });
   }

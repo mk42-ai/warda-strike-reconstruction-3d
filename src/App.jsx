@@ -40,6 +40,34 @@ export default function App() {
   const [imageryMode, setImageryMode] = useState('satellite');   // 'satellite' (ESRI) | 'dark' (Carto)
   const [clock, setClock] = useState('');                        // live UTC clock for the classification banner
   const [layers, setLayers] = useState({ corridor: true, geofence: true, waypoints: true });
+  const [scenarioId, setScenarioId] = useState('baseline_monitor');
+  const [hoverNode, setHoverNode] = useState(null);
+
+  // Illustrative resilience scenario chips (NOT confirmed intelligence)
+  const SCENARIOS = [
+    { id: 'baseline_monitor', name: 'Baseline monitor', det: 9.9, resp: 23.7, disr: 0.25, rec: 4.5, risk: 0.10 },
+    { id: 'sensor_degrade', name: 'Sensor degrade', det: 9.6, resp: 31.6, disr: 0.53, rec: 4.6, risk: 0.28 },
+    { id: 'staff_surge', name: 'Staff surge', det: 10.9, resp: 23.0, disr: 0.18, rec: 3.7, risk: 0.13 },
+    { id: 'multi_node_lag', name: 'Multi-node lag', det: 16.8, resp: 57.9, disr: 0.83, rec: 8.9, risk: 0.49 },
+  ];
+  const scenario = SCENARIOS.find((s) => s.id === scenarioId) || SCENARIOS[0];
+  // Blend illustrative KPIs with live progress so tiles update while the sim runs
+  const ease = progress * progress * (3 - 2 * progress);
+  const kpis = {
+    det: +(5.5 + (scenario.det - 5.5) * ease).toFixed(1),
+    resp: +(12 + (scenario.resp - 12) * ease).toFixed(1),
+    disr: +(0.05 + (scenario.disr - 0.05) * ease).toFixed(2),
+    rec: +(2.0 + (scenario.rec - 2.0) * ease).toFixed(1),
+    risk: +(0.04 + (scenario.risk - 0.04) * ease).toFixed(2),
+  };
+  const riskChip = kpis.risk >= 0.35 ? 'CONTAIN' : kpis.risk >= 0.15 ? 'MONITOR' : 'RESTORE';
+
+  const WATCH_NODES = [
+    { id: 'ORIGIN', label: 'ORIGIN', y: 12, tip: `Corridor origin ${CORRIDOR_ORIGIN.lat}, ${CORRIDOR_ORIGIN.lon}` },
+    { id: 'MWR-APT', label: 'MWR-APT', y: 38, tip: 'Municipal watch node (assumed role) — ILLUSTRATIVE' },
+    { id: 'SWM', label: 'SWM', y: 64, tip: 'Sector warning link (assumed) — ILLUSTRATIVE' },
+    { id: 'SITE', label: 'SITE', y: 90, tip: `${IMPACT_SITE.address} · ${IMPACT_SITE.lat}, ${IMPACT_SITE.lon}` },
+  ];
 
   const thermalReport = analyzeThermal(VIIRS_DETECTIONS);
 
@@ -94,6 +122,24 @@ export default function App() {
     const on = sceneRef.current?.setPlaying(!playing);
     setPlaying(!!on);
   }, [playing]);
+
+  const onReset = useCallback(() => {
+    sceneRef.current?.setPlaying(false);
+    setPlaying(false);
+    const r = sceneRef.current?.setProgress(0);
+    setProgress(0);
+    if (r) setReadout(r);
+  }, []);
+
+  const pickScenario = useCallback((id) => {
+    setScenarioId(id);
+    // keep visual language; restart playhead for the new illustrative path
+    sceneRef.current?.setPlaying(false);
+    setPlaying(false);
+    const r = sceneRef.current?.setProgress(0);
+    setProgress(0);
+    if (r) setReadout(r);
+  }, []);
 
   const onScrub = useCallback((e) => {
     const v = parseFloat(e.target.value);
@@ -153,9 +199,9 @@ export default function App() {
     <div className="app">
       {/* classification-style top banner (MoD presentation grade) */}
       <div className="classbar" role="banner">
-        <span className="cls-tag">UNCLASSIFIED // FOR BRIEFING &amp; SIMULATION</span>
+        <span className="cls-tag">UNCLASSIFIED // DEFENSIVE BRIEFING · PREVENTIVE</span>
         <span className="cls-mid">
-          <AirevWordmark /> <span className="cls-sys">SENTINEL OVERWATCH · IMP-08</span>
+          <AirevWordmark /> <span className="cls-sys">SENTINEL RESILIENCE · IMP-08</span>
         </span>
         <span className="cls-tag cls-right">
           <span className="cls-live"><span className="cls-dot" />{ready ? 'LIVE' : 'INIT'}</span>
@@ -170,12 +216,59 @@ export default function App() {
       <div ref={cesiumRef} className="cesium-host" />
       {thermal && <div className="thermal-overlay" />}
 
+      {/* Dark-theme corridor watch diagram (matches original geospatial aesthetic) */}
+      <div className="corridor-overlay" aria-label="Al Warqa corridor watch nodes">
+        <div className="co-header">3 · SOUTHERN GULF → UAE COAST · TACTICAL CORRIDOR<br/><span style={{fontSize:"13px",color:"#c8d0d8",fontWeight:800}}>WATCH NODES · ILLUSTRATIVE RECONSTRUCTION</span></div>
+        <div className="co-body">
+          <div className="co-route" />
+          <div className="co-scan" />
+          <div className="co-playhead" style={{ top: `${8 + progress * 78}%` }} />
+          {WATCH_NODES.map((n) => (
+            <button
+              key={n.id}
+              type="button"
+              className={`co-node ${hoverNode === n.id ? 'on' : ''}`}
+              style={{ top: `${n.y}%` }}
+              title={n.tip}
+              onMouseEnter={() => setHoverNode(n.id)}
+              onMouseLeave={() => setHoverNode(null)}
+              onClick={() => setHoverNode(n.id)}
+            >
+              <span className="co-dot" />
+              <span className={`co-plate ${n.id === 'MWR-APT' ? 'slate' : n.id === 'SWM' || n.id === 'SITE' ? 'mint' : ''}`}>
+                {n.id === 'MWR-APT' ? 'MWR-APT NODE' : n.id === 'SWM' ? 'SWM LINK' : n.id === 'SITE' ? 'WARDA / JENNA · SITE' : 'ORIGIN'}
+              </span>
+            </button>
+          ))}
+        </div>
+        {hoverNode && (
+          <div className="co-tip">{WATCH_NODES.find((n) => n.id === hoverNode)?.tip}</div>
+        )}
+      </div>
+
+      {/* Illustrative KPI plates — update while sim runs */}
+      <div className="kpi-strip" role="region" aria-label="Illustrative resilience metrics">
+        {[
+          { t: 'DETECTION TIME', v: kpis.det, u: 'min' },
+          { t: 'RESPONSE TIME', v: kpis.resp, u: 'min' },
+          { t: 'DISRUPTION', v: kpis.disr, u: '' },
+          { t: 'RECOVERY', v: kpis.rec, u: 'h' },
+          { t: 'RESIDUAL RISK', v: kpis.risk, u: '' },
+        ].map((m) => (
+          <div key={m.t} className="kpi-card">
+            <div className="kpi-t">{m.t}</div>
+            <div className="kpi-v">{m.v}<span className="kpi-u">{m.u}</span></div>
+          </div>
+        ))}
+        <div className={`kpi-chip st-${riskChip.toLowerCase()}`}>{riskChip}</div>
+      </div>
+
       {/* top brand bar */}
       <header className="topbar">
         <Svg markup={LOGO} className="logo" />
         <div className="title-block">
-          <div className="t1">IMP-08 · WARDA APARTMENTS STRIKE RECONSTRUCTION</div>
-          <div className="t2">{META.munition} · Iran→Dubai corridor · {META.operation} · real-satellite 3D theatre</div>
+          <div className="t1">IMP-08 · UAE DEFENSIVE COMMAND CENTER · RESILIENCE THEATRE</div>
+          <div className="t2">Early-warning · infrastructure dependency · recovery readiness · ILLUSTRATIVE corridor awareness</div>
         </div>
         <div className="badge">
           <span className="dot" /> {ready ? 'LIVE' : 'INIT'}
@@ -197,7 +290,7 @@ export default function App() {
         </div>
 
         <div className="panel">
-          <div className="panel-h">WAYPOINT NAVIGATION · 6 STOPS</div>
+          <div className="panel-h">CORRIDOR NAV · WATCH STOPS</div>
           <div className="wp-list">
             {wp.map((w, i) => (
               <button key={w.id} className={`wp-row ${activeWp === i ? 'on' : ''}`} onClick={() => goWp(i)}>
@@ -210,14 +303,39 @@ export default function App() {
             ))}
           </div>
         </div>
+
+        <div className="panel">
+          <div className="panel-h">RESILIENCE SCENARIOS · ILLUSTRATIVE</div>
+          <div className="scenario-chips">
+            {SCENARIOS.map((s) => (
+              <button
+                key={s.id}
+                type="button"
+                className={`scenario-chip ${scenarioId === s.id ? 'on' : ''}`}
+                onClick={() => pickScenario(s.id)}
+              >
+                {s.name}
+              </button>
+            ))}
+          </div>
+          <div className="muted small">
+            Active: <b className="accent-text">{scenario.name}</b>. Numbers are planning sketches only — not confirmed intelligence.
+          </div>
+          <div className="mission-pillars">
+            <div className="pillar"><span>DETECTION</span><b>Early-warning ring + thermal cueing</b></div>
+            <div className="pillar"><span>RESPONSE</span><b>Staffed containment readiness</b></div>
+            <div className="pillar"><span>RECOVERY</span><b>Site continuity drills</b></div>
+            <div className="pillar"><span>RESIDUAL RISK</span><b>Endurance geofence · +{GEOFENCE.earlierWarningMin} min</b></div>
+          </div>
+        </div>
       </aside>
 
       {/* right: impact + telemetry + geofence + thermal + intel + imagery + ion */}
       <aside className="right-rail">
         <div className="panel">
-          <div className="panel-h">IMP-08 IMPACT SITE</div>
-          <img className="hero-img" src={IMAGERY.droneHero} alt="Al Warqa impact site — 3D photorealistic satellite capture" />
-          <div className="hero-cap">Al Warqa, Dubai — 3D satellite capture</div>
+          <div className="panel-h">PROTECTED SITE · AL WARQA</div>
+          <img className="hero-img" src={IMAGERY.droneHero} alt="Al Warqa infrastructure context — 3D satellite capture" />
+          <div className="context-headline">AL WARQA, DUBAI — INFRASTRUCTURE CONTEXT (3D SATELLITE)</div>
           <div className="hero-strip">
             {IMAGERY.heroVariations.map((src, i) => (
               <figure key={i} className="hero-thumb">
@@ -226,26 +344,27 @@ export default function App() {
               </figure>
             ))}
           </div>
-          <div className="addr-label">{IMPACT_SITE.address}</div>
-          <div className="kv"><span>Impact</span><b>{IMPACT_SITE.lat.toFixed(7)}, {IMPACT_SITE.lon.toFixed(7)}</b></div>
+          <div className="addr-label addr-highlight">{IMPACT_SITE.address}</div>
+          <div className="kv"><span>Site</span><b>{IMPACT_SITE.lat.toFixed(7)}, {IMPACT_SITE.lon.toFixed(7)}</b></div>
           <div className="kv"><span>Plus code</span><b>{IMPACT_SITE.plusCode}</b></div>
-          <div className="kv"><span>Launch origin</span><b>{CORRIDOR_ORIGIN.lat.toFixed(6)}, {CORRIDOR_ORIGIN.lon.toFixed(5)}</b></div>
+          <div className="kv"><span>Corridor origin</span><b>{CORRIDOR_ORIGIN.lat.toFixed(6)}, {CORRIDOR_ORIGIN.lon.toFixed(5)}</b></div>
           <div className="kv"><span>Region</span><b>{IMPACT_SITE.analystContext.region} ({IMPACT_SITE.analystContext.isoRegion})</b></div>
           <div className="kv"><span>Timezone</span><b>{IMPACT_SITE.analystContext.timezone}</b></div>
+          <div className="muted small">Verified site facts only. Watch-node roles and all KPI numbers are ILLUSTRATIVE ONLY — not confirmed intelligence.</div>
         </div>
 
         <div className="panel">
-          <div className="panel-h">LIVE TELEMETRY</div>
+          <div className="panel-h">LIVE TELEMETRY · AWARENESS</div>
           <div className="kv"><span>Phase</span><b>{readout?.phase || 'Launch'}</b></div>
           <div className="kv"><span>Leg</span><b>{readout?.legFrom} → {readout?.legTo}</b></div>
           <div className="kv"><span>Altitude</span><b>{fmt((readout?.altM || 0) / 1000, 2)} km</b></div>
           <div className="kv"><span>Travelled</span><b>{fmt(readout?.travelledKm)} / {fmt(readout?.totalKm)} km</b></div>
-          <div className="kv"><span>To impact</span><b>{fmt(readout?.distToImpactKm)} km</b></div>
+          <div className="kv"><span>To site</span><b>{fmt(readout?.distToImpactKm)} km</b></div>
           <div className="kv"><span>Speed</span><b>{fmt(readout?.speedKmh, 0)} km/h</b></div>
           <div className="kv"><span>Dive angle</span><b className={readout?.divePitchDeg > 5 ? 'alert' : ''}>{fmt(readout?.divePitchDeg, 1)}°</b></div>
           <div className="kv"><span>ETA</span><b>{fmt(readout?.etaMin)} min</b></div>
           <div className="inspector" ref={inspectorRef}>
-            <div className="insp-cap">SHAHED-136 · OWA LOITERING MUNITION</div>
+            <div className="insp-cap">AIRFRAME INSPECTOR · AWARENESS TRACK</div>
           </div>
         </div>
 
@@ -320,9 +439,11 @@ export default function App() {
             <button key={l} className={`chip ${layers[l] ? 'on' : ''}`} onClick={() => toggleLayer(l)}>{l}</button>
           ))}
         </div>
-        <button className="play" onClick={togglePlay}>{playing ? '❚❚ PAUSE' : '▶ PLAY STRIKE'}</button>
+        <button className="play" onClick={togglePlay}>{playing ? '❚❚ PAUSE' : '▶ RUN AWARENESS'}</button>
+        <button className="reset-btn" type="button" onClick={onReset}>↺ RESET</button>
         <input className="scrub" type="range" min="0" max="1" step="0.001" value={progress} onChange={onScrub} />
         <div className="prog">{Math.round(progress * 100)}%</div>
+        <div className="scenario-tag">{scenario.name}</div>
         <div className="stats">
           <span>{STATS.owaDrones} OWA</span><span>{STATS.ballisticMissiles} BM</span><span>{STATS.durationDays}-day</span>
         </div>
@@ -352,7 +473,7 @@ export default function App() {
       )}
 
       <div className="footer-brand">
-        <AirevWordmark /> <span className="fb-sub">Vision-Drone Overwatch · Sentinel</span>
+        <AirevWordmark /> <span className="fb-sub">Defensive Resilience · Sentinel Command Center · ILLUSTRATIVE KPIs</span>
       </div>
     </div>
   );
