@@ -343,14 +343,14 @@ body {
 .co-header {
   font-family: var(--sans);
   font-weight: 900;
-  font-size: 17px; /* larger for screenshot-legibility */
-  letter-spacing: 0.5px;
-  line-height: 1.3;
-  color: #ffe08a; /* crisp amber, no glow wash */
-  background: #05070a;
-  border: 2px solid #ffb02e;
+  font-size: 20px; /* v2: larger for screenshot-legibility */
+  letter-spacing: 0.6px;
+  line-height: 1.25;
+  color: #ffe8a0; /* crisp amber, no glow wash */
+  background: #000000;
+  border: 2px solid #ffc04a;
   border-radius: 8px;
-  padding: 12px 14px;
+  padding: 14px 16px;
   text-align: center;
   margin-bottom: 12px;
   text-shadow: none !important;
@@ -358,46 +358,49 @@ body {
   opacity: 1 !important;
   overflow: visible; /* never clip header text */
   white-space: normal;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: geometricPrecision;
 }
 .co-header-main {
   display: block;
-  font-size: 17px;
+  font-size: 20px;
   font-weight: 900;
-  color: #ffe08a;
-  letter-spacing: 0.4px;
-  line-height: 1.3;
+  color: #ffffff; /* max contrast white header over dark plate */
+  letter-spacing: 0.5px;
+  line-height: 1.25;
   text-shadow: none !important;
   filter: none !important;
 }
 .co-header-sub {
   display: block;
-  margin-top: 6px;
-  font-size: 14px;
+  margin-top: 8px;
+  font-size: 15px;
   font-weight: 800;
-  color: #e8eef4; /* higher contrast than prior #c8d0d8 */
-  letter-spacing: 0.4px;
+  color: #ffe08a; /* amber band — high contrast on black plate */
+  letter-spacing: 0.5px;
   text-shadow: none !important;
   filter: none !important;
 }
 .co-header-day {
   display: block;
-  margin-top: 6px;
-  font-size: 13px;
+  margin-top: 8px;
+  font-size: 14px;
   font-weight: 900;
-  color: #fff4cc;
-  letter-spacing: 0.8px;
+  color: #fff8d0;
+  letter-spacing: 1.0px;
   text-transform: uppercase;
   text-shadow: none !important;
   filter: none !important;
 }
 .co-body {
   position: relative;
-  height: 400px; /* room for strike-impact caption under the axis */
-  background: rgba(5,7,10,0.94);
-  border: 2px solid rgba(78,227,155,0.45);
+  height: 420px; /* room for strike-impact caption under the axis */
+  background: #000000;
+  border: 2px solid rgba(78,227,155,0.55);
   border-radius: 10px;
   overflow: visible; /* do not clip labels */
   filter: none !important;
+  opacity: 1 !important;
 }
 /* Magenta/purple STRIKE IMPACT caption under the corridor axis — daytime framing */
 .co-strike-caption {
@@ -407,15 +410,15 @@ body {
   transform: translateX(-50%);
   z-index: 6;
   font-family: var(--sans);
-  font-size: 15px;
+  font-size: 17px;
   font-weight: 900;
-  letter-spacing: 1.2px;
+  letter-spacing: 1.6px;
   text-transform: uppercase;
-  color: #f0d6ff; /* high-contrast magenta/purple */
-  background: #1a0a24;
-  border: 2px solid #c084fc;
+  color: #ffe8ff; /* max-contrast magenta/white on deep purple plate */
+  background: #120018;
+  border: 2px solid #e0a0ff;
   border-radius: 8px;
-  padding: 8px 14px;
+  padding: 10px 16px;
   white-space: nowrap;
   text-shadow: none !important;
   filter: none !important;
@@ -423,6 +426,8 @@ body {
   overflow: visible;
   box-shadow: none; /* no neon bloom that hides letters */
   pointer-events: none;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: geometricPrecision;
 }
 .co-route {
   position: absolute;
@@ -478,11 +483,11 @@ body {
   opacity: 1 !important;
 }
 .co-dot {
-  width: 22px;
-  height: 22px;
+  width: 24px;
+  height: 24px;
   border-radius: 50%;
   background: #4ee39b;
-  border: 3px solid #e8fff5;
+  border: 3px solid #ffffff;
   box-shadow: none; /* solid node, no halo bloom / neon smear */
   flex: 0 0 auto;
   z-index: 2;
@@ -490,41 +495,43 @@ body {
   filter: none !important;
 }
 .co-node.on .co-dot {
-  width: 26px;
-  height: 26px;
+  width: 28px;
+  height: 28px;
   border-width: 3px;
   box-shadow: none;
   filter: none !important;
 }
 .co-plate {
   font-family: var(--sans);
-  font-size: 17px !important; /* larger type for readability */
+  font-size: 18px !important; /* v2 larger type for readability */
   font-weight: 900 !important;
-  letter-spacing: 0.4px;
+  letter-spacing: 0.5px;
   line-height: 1.25;
   color: #ffffff !important; /* max contrast on dark plate */
-  background: #05070a !important;
-  border: 2px solid #4ee39b !important;
+  background: #000000 !important;
+  border: 2px solid #6ef0b0 !important;
   border-radius: 8px;
-  padding: 9px 13px;
+  padding: 10px 14px;
   white-space: nowrap;
   text-shadow: none !important;
   filter: none !important;
   opacity: 1 !important;
   overflow: visible; /* never clip plate text */
   max-width: none;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: geometricPrecision;
 }
 .co-plate.slate {
-  background: #1a0a24 !important;
-  color: #f8e8ff !important; /* high-contrast purple tag text */
-  border-color: #c084fc !important;
+  background: #120018 !important;
+  color: #ffe8ff !important; /* high-contrast purple tag text */
+  border-color: #e0a0ff !important;
   text-shadow: none !important;
   filter: none !important;
 }
 .co-plate.mint {
-  background: #0b3d2e !important;
+  background: #042218 !important;
   color: #e8fff5 !important;
-  border-color: #4ee39b !important;
+  border-color: #6ef0b0 !important;
   text-shadow: none !important;
   filter: none !important;
 }

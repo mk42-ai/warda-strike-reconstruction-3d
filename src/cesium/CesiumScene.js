@@ -349,35 +349,35 @@ export default class CesiumScene {
         scene.postProcessStages.fxaa.enabled = true;
       }
     } catch (_) { /* FXAA unavailable → MSAA/native AA still apply */ }
-    // physically based sun + globe lighting
+    // physically based sun + globe lighting (daytime reconstruction — not night)
     scene.globe.enableLighting = true;
     scene.globe.dynamicAtmosphereLighting = true;
     scene.globe.dynamicAtmosphereLightingFromSun = true;
     scene.globe.showGroundAtmosphere = true;
-    scene.globe.atmosphereLightIntensity = 14.0;   // a touch brighter key light
+    scene.globe.atmosphereLightIntensity = 28.0;   // bright midday key light
     // image-based / ambient lighting so shadowed faces read with realistic fill
     try {
       scene.globe.lightingFadeOutDistance = 40_000.0;
       scene.globe.lightingFadeInDistance = 20_000.0;
       scene.globe.nightFadeOutDistance = 40_000.0;
-      scene.globe.atmosphereScatteringIntensity = 2.6;
-      if (scene.light) scene.light.intensity = 4.2;             // sun intensity
+      scene.globe.atmosphereScatteringIntensity = 2.2;
+      if (scene.light) scene.light.intensity = 5.0;             // midday sun intensity
       if ('imageBasedLighting' in scene && scene.imageBasedLighting) {
         scene.imageBasedLighting.imageBasedLightingFactor = new C.Cartesian2(1.0, 1.0);
-        scene.imageBasedLighting.luminanceAtZenith = 0.5;       // ambient IBL fill
+        scene.imageBasedLighting.luminanceAtZenith = 0.65;      // brighter ambient IBL fill
       }
       if ('sphericalHarmonicCoefficients' in scene) { /* default env IBL kept */ }
     } catch (_) {}
     scene.globe.depthTestAgainstTerrain = true;    // tiles/markers sit on terrain
-    scene.globe.baseColor = C.Color.fromCssColorString('#0b1424');
+    scene.globe.baseColor = C.Color.fromCssColorString('#1a2a3a'); // lighter base (day)
     scene.globe.maximumScreenSpaceError = 1.5;     // sharper terrain/imagery detail
     scene.globe.preloadSiblings = true;            // fewer holes while moving
-    // tuned distance fog → depth cue without washing the corridor out
+    // tuned distance fog → depth cue without washing labels/corridor out
     scene.fog.enabled = true;
-    scene.fog.density = 0.00004; // near-clear daytime haze
+    scene.fog.density = 0.00002; // near-clear midday haze
     scene.fog.screenSpaceErrorFactor = 4.0;
     scene.skyAtmosphere.show = true;
-    scene.skyAtmosphere.atmosphereLightIntensity = 18.0;
+    scene.skyAtmosphere.atmosphereLightIntensity = 28.0;
     // ACES tone mapping on the Cesium HDR pipeline — FEATURE-DETECTED so it
     // no-ops on builds that lack the Tonemapper enum / postProcessStages slot.
     try {
@@ -399,11 +399,11 @@ export default class CesiumScene {
         // OFF for label clarity — glow was smearing Cesium callouts (Southern Gulf / WARDA IMPACT)
         bloom.enabled = false;
         bloom.uniforms.glowOnly = false;
-        bloom.uniforms.contrast = 90;
-        bloom.uniforms.brightness = -0.35;
-        bloom.uniforms.delta = 0.8;
-        bloom.uniforms.sigma = 1.4;
-        bloom.uniforms.stepSize = 0.8;
+        bloom.uniforms.contrast = 80;
+        bloom.uniforms.brightness = -0.55;   // v2: deeper off-state, no neon wash
+        bloom.uniforms.delta = 0.6;
+        bloom.uniforms.sigma = 1.0;
+        bloom.uniforms.stepSize = 0.6;
       }
     } catch (_) { /* bloom unavailable on this GPU → skip glow */ }
 
@@ -413,16 +413,17 @@ export default class CesiumScene {
     // adds cinematic contact shadowing. It needs a depth texture, so it is
     // FEATURE-DETECTED + guarded (no-ops on GPUs/contexts without depth support,
     // exactly like the bloom/silhouette stages) and is disabled on renderError.
+    // v2: keep AO mild so it does not darken HUD-adjacent globe labels.
     try {
       const ao = scene.postProcessStages && scene.postProcessStages.ambientOcclusion;
       if (ao) {
         ao.enabled = true;
         if (ao.uniforms) {
-          ao.uniforms.intensity = 3.2;         // strength of the darkening
-          ao.uniforms.bias = 0.1;              // avoid self-occlusion acne
-          ao.uniforms.lengthCap = 0.28;        // max world-space sample radius
-          ao.uniforms.stepSize = 1.9;
-          ao.uniforms.blurStepSize = 0.86;     // soften the AO term
+          ao.uniforms.intensity = 1.8;         // softer darkening (was 3.2)
+          ao.uniforms.bias = 0.12;             // avoid self-occlusion acne
+          ao.uniforms.lengthCap = 0.22;        // max world-space sample radius
+          ao.uniforms.stepSize = 1.6;
+          ao.uniforms.blurStepSize = 0.7;      // softer AO term
         }
       }
     } catch (_) { /* AO unsupported on this GPU → skip contact shadowing */ }
@@ -509,22 +510,27 @@ export default class CesiumScene {
     // 10:00 local → a high, warm sun that lights the whole Iran→Dubai corridor
     // consistently. Guarded so a bad date string can never abort init.
     try {
-      // Fixed mid-MORNING daylight from TIMELINE (daytime framing, not night clock).
+      // Fixed MIDDAY daylight from TIMELINE (daytime framing, not night clock).
       // Stored so EVERY camera mode / play / thermal toggle re-asserts it via
       // _applyDaylight() and lighting can never flip to a night clock time.
-      this._dayIso = (TIMELINE && TIMELINE.dayIso) || '2025-06-21T06:30:00Z';
+      this._dayIso = (TIMELINE && TIMELINE.dayIso) || '2025-06-21T08:00:00Z';
       this._applyDaylight();
       // Make the sun the lighting source and ensure globe lighting is on so the
       // daylight actually reaches terrain/imagery in every mode.
       if (scene.sun) scene.sun.show = true;
       if (scene.moon) scene.moon.show = false;
       scene.globe.enableLighting = true;
+      try {
+        scene.globe.dynamicAtmosphereLighting = true;
+        scene.globe.dynamicAtmosphereLightingFromSun = true;
+        scene.globe.showGroundAtmosphere = true;
+      } catch (_) {}
       // brighten the lit side so captured imagery never reads muddy/black
-      scene.globe.atmosphereLightIntensity = 28.0;
-      if (scene.light) {
+      scene.globe.atmosphereLightIntensity = 32.0;
+      try {
         scene.light = new C.SunLight();        // explicit physically based sun
-        scene.light.intensity = 4.2;
-      }
+        scene.light.intensity = 5.0;
+      } catch (_) {}
     } catch (_) { /* keep default clock/lighting if anything is unavailable */ }
 
     // Terrain: LIVE, key-free ESRI World Terrain is loaded asynchronously in
@@ -542,32 +548,61 @@ export default class CesiumScene {
     try {
       const scene = this.viewer && this.viewer.scene;
       if (!scene) return;
-      if (this._dayIso) {
-        this.viewer.clock.currentTime = C.JulianDate.fromIso8601(this._dayIso);
-      }
+      // Prefer TIMELINE.dayIso every call so a stale night ISO cannot stick.
+      const dayIso = (TIMELINE && TIMELINE.dayIso) || this._dayIso || '2025-06-21T08:00:00Z';
+      this._dayIso = dayIso;
+      try {
+        this.viewer.clock.currentTime = C.JulianDate.fromIso8601(dayIso);
+        // Lock the presentation clock — do not animate into night/dusk.
+        if (TIMELINE && TIMELINE.lockClock !== false) {
+          this.viewer.clock.shouldAnimate = false;
+          this.viewer.clock.multiplier = 0;
+          if (this.viewer.clock.clockRange != null && C.ClockRange) {
+            this.viewer.clock.clockRange = C.ClockRange.UNBOUNDED;
+          }
+        }
+      } catch (_) {}
       scene.globe.enableLighting = true;                 // sun lighting in EVERY mode
+      try {
+        scene.globe.dynamicAtmosphereLighting = true;
+        scene.globe.dynamicAtmosphereLightingFromSun = true;
+      } catch (_) {}
       if (scene.sun) scene.sun.show = true;
       if (scene.moon) scene.moon.show = false;
       if (scene.skyAtmosphere) {
         scene.skyAtmosphere.show = true;
-        try { scene.skyAtmosphere.atmosphereLightIntensity = 28.0; } catch (_) {}
+        try { scene.skyAtmosphere.atmosphereLightIntensity = 32.0; } catch (_) {}
       }
-      // Daytime: light haze only — keep horizon readable, not night fog
+      // Daytime: near-clear haze only — keep horizon + labels readable
       if (scene.fog) {
         scene.fog.enabled = true;
-        scene.fog.density = 0.00004;
+        scene.fog.density = 0.00002;
       }
       scene.globe.showGroundAtmosphere = true;
-      try { scene.globe.atmosphereLightIntensity = 28.0; } catch (_) {}
-      // keep a physically based sun light (not a fixed flashlight at the camera)
+      try { scene.globe.atmosphereLightIntensity = 32.0; } catch (_) {}
+      // Physically based midday sun (not a fixed flashlight at the camera)
       try {
         if (!(scene.light instanceof C.SunLight)) scene.light = new C.SunLight();
-        scene.light.intensity = 4.2;
+        scene.light.intensity = 5.0;
       } catch (_) {}
-      // Keep bloom OFF so globe labels stay sharp in daytime reconstruction
+      // Keep bloom OFF so globe labels stay sharp (no neon wash / motion smear)
       try {
         const bloom = scene.postProcessStages && scene.postProcessStages.bloom;
-        if (bloom) bloom.enabled = false;
+        if (bloom) {
+          bloom.enabled = false;
+          if (bloom.uniforms) {
+            bloom.uniforms.brightness = -0.5;
+            bloom.uniforms.glowOnly = false;
+          }
+        }
+      } catch (_) {}
+      // Soften AO so it does not darken label plates / horizon
+      try {
+        const ao = scene.postProcessStages && scene.postProcessStages.ambientOcclusion;
+        if (ao && ao.uniforms) {
+          ao.uniforms.intensity = Math.min(ao.uniforms.intensity || 2.0, 2.0);
+          ao.uniforms.blurStepSize = 0.7;
+        }
       } catch (_) {}
     } catch (_) { /* never let a lighting refresh break a mode switch */ }
   }
@@ -723,23 +758,26 @@ export default class CesiumScene {
       },
     });
 
-    // Shared high-clarity label style for the Southern Gulf corridor timeline.
-    // Larger type, solid dark plate, black outline, NO distance shrink, NO glow.
+    // v2 high-clarity label style for the Southern Gulf corridor timeline.
+    // Max contrast plate, heavy outline, almost no distance shrink, no glow/blur.
     const clearLabel = (text, fillCss, bgCss, opts = {}) => ({
       text,
-      font: opts.font || '900 22px Inter, Segoe UI, sans-serif',
+      font: opts.font || '900 26px Inter, Segoe UI, Arial, sans-serif',
       fillColor: C.Color.fromCssColorString(fillCss),
       outlineColor: C.Color.BLACK,
-      outlineWidth: 4,
+      outlineWidth: 5,
       style: C.LabelStyle.FILL_AND_OUTLINE,
       showBackground: true,
-      backgroundColor: C.Color.fromCssColorString(bgCss).withAlpha(0.98),
-      backgroundPadding: new C.Cartesian2(14, 10),
-      pixelOffset: opts.pixelOffset || new C.Cartesian2(0, -34),
+      // Fully opaque plate so map/globe never washes letterforms
+      backgroundColor: C.Color.fromCssColorString(bgCss).withAlpha(1.0),
+      backgroundPadding: new C.Cartesian2(16, 12),
+      pixelOffset: opts.pixelOffset || new C.Cartesian2(0, -38),
       disableDepthTestDistance: Number.POSITIVE_INFINITY,
-      // Keep labels large even at corridor overview distance (no blurry shrink)
-      scaleByDistance: new C.NearFarScalar(80_000, 1.25, 2_000_000, 0.95),
+      // Keep labels large at corridor overview — avoid blurry shrink
+      scaleByDistance: new C.NearFarScalar(60_000, 1.35, 2_500_000, 1.05),
       translucencyByDistance: undefined,
+      horizontalOrigin: C.HorizontalOrigin.CENTER,
+      verticalOrigin: opts.verticalOrigin || C.VerticalOrigin.BOTTOM,
     });
 
     // 6 numbered waypoint markers (horizontal corridor timeline nodes)
@@ -747,7 +785,7 @@ export default class CesiumScene {
       id: `wp-${i}`,
       position: carto(w.lon, w.lat, this._altAt(i / (CORRIDOR.waypoints.length - 1)) + 200),
       point: {
-        pixelSize: 14,
+        pixelSize: 16,
         color: C.Color.fromCssColorString(BRAND.accent),
         outlineColor: C.Color.WHITE,
         outlineWidth: 3,
@@ -756,8 +794,8 @@ export default class CesiumScene {
       label: clearLabel(
         `${w.legOrder}  ${w.name}`,
         '#FFFFFF',
-        '#05070a',
-        { font: '900 22px Inter, Segoe UI, sans-serif' },
+        '#000000',
+        { font: '900 26px Inter, Segoe UI, Arial, sans-serif' },
       ),
       _wp: w,
     }));
@@ -766,12 +804,12 @@ export default class CesiumScene {
     v.entities.add({
       id: 'launch-site',
       position: carto(LAUNCH_SITE.lon, LAUNCH_SITE.lat, LAUNCH_SITE.height),
-      billboard: { image: MARKER_URIS.launch, width: 40, height: 47, verticalOrigin: C.VerticalOrigin.BOTTOM, disableDepthTestDistance: Number.POSITIVE_INFINITY },
+      billboard: { image: MARKER_URIS.launch, width: 42, height: 50, verticalOrigin: C.VerticalOrigin.BOTTOM, disableDepthTestDistance: Number.POSITIVE_INFINITY },
       label: clearLabel(
         'CORRIDOR ORIGIN · BANDAR ABBAS',
-        '#FFE8E0',
+        '#FFFFFF',
         '#1A0A08',
-        { font: '900 20px Inter, Segoe UI, sans-serif', pixelOffset: new C.Cartesian2(0, 22) },
+        { font: '900 24px Inter, Segoe UI, Arial, sans-serif', pixelOffset: new C.Cartesian2(0, 24) },
       ),
       _site: LAUNCH_SITE,
     });
@@ -782,12 +820,12 @@ export default class CesiumScene {
     v.entities.add({
       id: 'impact-site',
       position: carto(IMPACT_SITE.lon, IMPACT_SITE.lat, IMPACT_SITE.height),
-      billboard: { image: MARKER_URIS.impact, width: 44, height: 52, verticalOrigin: C.VerticalOrigin.BOTTOM, disableDepthTestDistance: Number.POSITIVE_INFINITY },
+      billboard: { image: MARKER_URIS.impact, width: 46, height: 54, verticalOrigin: C.VerticalOrigin.BOTTOM, disableDepthTestDistance: Number.POSITIVE_INFINITY },
       label: clearLabel(
         `${impactCaption}\n${framingLabel} · WARDA / JENNA`,
-        '#F8E8FF',
-        '#1A0A24',
-        { font: '900 22px Inter, Segoe UI, sans-serif', pixelOffset: new C.Cartesian2(0, 24) },
+        '#FFE8FF',
+        '#120018',
+        { font: '900 26px Inter, Segoe UI, Arial, sans-serif', pixelOffset: new C.Cartesian2(0, 26) },
       ),
       _site: IMPACT_SITE,
     });
@@ -815,9 +853,9 @@ export default class CesiumScene {
         point: { pixelSize: 10, color: C.Color.fromCssColorString(BRAND.warn), outlineColor: C.Color.BLACK, outlineWidth: 2, disableDepthTestDistance: Number.POSITIVE_INFINITY },
         label: clearLabel(
           'EARLY-WARNING RING · +8.2 min detection lead',
-          '#FFF4CC',
-          '#2A2000',
-          { font: '900 18px Inter, Segoe UI, sans-serif', pixelOffset: new C.Cartesian2(0, -32) },
+          '#FFFCE8',
+          '#1A1400',
+          { font: '900 22px Inter, Segoe UI, Arial, sans-serif', pixelOffset: new C.Cartesian2(0, -36) },
         ),
       });
     }
@@ -890,17 +928,17 @@ export default class CesiumScene {
       },
       label: {
         text: 'AIRFRAME TRACK · DAYTIME',
-        font: '900 18px Inter, Segoe UI, sans-serif',
+        font: '900 22px Inter, Segoe UI, Arial, sans-serif',
         fillColor: C.Color.fromCssColorString('#FFFFFF'),
         outlineColor: C.Color.BLACK,
-        outlineWidth: 3,
+        outlineWidth: 5,
         style: C.LabelStyle.FILL_AND_OUTLINE,
         showBackground: true,
-        backgroundColor: C.Color.fromCssColorString('#0A0E13').withAlpha(0.98),
-        backgroundPadding: new C.Cartesian2(12, 8),
-        pixelOffset: new C.Cartesian2(0, 30),
+        backgroundColor: C.Color.fromCssColorString('#000000').withAlpha(1.0),
+        backgroundPadding: new C.Cartesian2(14, 10),
+        pixelOffset: new C.Cartesian2(0, 32),
         disableDepthTestDistance: Number.POSITIVE_INFINITY,
-        scaleByDistance: new C.NearFarScalar(50_000, 1.15, 800_000, 0.9),
+        scaleByDistance: new C.NearFarScalar(50_000, 1.25, 1_000_000, 1.0),
       },
     });
 
@@ -966,11 +1004,18 @@ export default class CesiumScene {
     this.thermalEntities.forEach((e) => (e.show = on));
     // thermal palette: desaturate globe + lift bloom
     const scene = this.viewer.scene;
-    scene.globe.baseColor = on ? C.Color.fromCssColorString('#0a0a0a') : C.Color.fromCssColorString('#0b1424');
+    scene.globe.baseColor = on ? C.Color.fromCssColorString('#0a0a0a') : C.Color.fromCssColorString('#1a2a3a');
     // guarded bloom (may be unavailable on this GPU after renderError recovery)
-    try { if (scene.postProcessStages && scene.postProcessStages.bloom) scene.postProcessStages.bloom.uniforms.brightness = on ? 0.25 : -0.2; } catch (_) {}
-    // restore the DAYLIGHT intensity (20.0) when leaving thermal, not the old 12.0
-    scene.globe.atmosphereLightIntensity = on ? 3.0 : 20.0;
+    // v2: keep bloom OFF outside thermal so labels stay sharp
+    try {
+      const bloom = scene.postProcessStages && scene.postProcessStages.bloom;
+      if (bloom) {
+        bloom.enabled = !!on;
+        if (bloom.uniforms) bloom.uniforms.brightness = on ? 0.15 : -0.55;
+      }
+    } catch (_) {}
+    // restore the DAYLIGHT intensity when leaving thermal
+    scene.globe.atmosphereLightIntensity = on ? 3.0 : 32.0;
     this.imageryAlpha(on ? 0.32 : 1.0);
     if (!on) this._applyDaylight();              // re-assert daylight leaving thermal
     if (on) this.setCamMode('thermal');
@@ -1005,14 +1050,17 @@ export default class CesiumScene {
     this._lastT = performance.now();   // avoid a dt spike on resume
     if (this._playing) this._applyDaylight();   // both plays start in daylight
     // HARDENING (fix): make sure nothing about the render/clock config can keep
-    // the play sequence from advancing. The progress driver is our own rAF loop,
-    // but we also wake the Cesium clock + force continuous rendering on Play so
-    // animation is guaranteed to run on every GPU/config.
+    // the play sequence from advancing. The progress driver is our own rAF loop.
+    // v2: when TIMELINE.lockClock is set, do NOT animate the Cesium clock into
+    // night — keep continuous rendering via requestRenderMode=false instead.
     try {
       if (this.viewer) {
         const scene = this.viewer.scene;
+        const lockClock = !(TIMELINE && TIMELINE.lockClock === false);
         if (this._playing) {
-          this.viewer.clock.shouldAnimate = true;     // wake the clock
+          // Progress is rAF-driven; keep presentation clock pinned to daytime.
+          this.viewer.clock.shouldAnimate = lockClock ? false : true;
+          if (lockClock) this.viewer.clock.multiplier = 0;
           scene.requestRenderMode = false;            // never throttle while playing
           scene.maximumRenderTimeChange = Infinity;
           scene.requestRender();                       // kick an immediate frame
