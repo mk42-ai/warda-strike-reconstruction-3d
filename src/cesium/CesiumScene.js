@@ -763,7 +763,7 @@ export default class CesiumScene {
     // backplate, scaleByDistance + translucencyByDistance + distanceDisplayCondition,
     // eyeOffset separation, disableDepthTestDistance. No bloom/glow/blur.
     // WCAG: white/near-white text on near-black plates ≥ 4.5:1; bold large ≥ 3:1.
-    const NAVY_BG = new C.Color(0.015, 0.025, 0.06, 0.96); // opaque navy plate
+    const NAVY_BG = new C.Color(0.07, 0.08, 0.10, 0.94); // graphite plate
     const clearLabel = (text, fillCss, opts = {}) => {
       const bg = opts.bgColor
         || (opts.bgCss ? C.Color.fromCssColorString(opts.bgCss).withAlpha(opts.bgAlpha != null ? opts.bgAlpha : 0.96) : NAVY_BG);
@@ -772,16 +772,16 @@ export default class CesiumScene {
       const ddcFar = opts.ddcFar != null ? opts.ddcFar : 1_000_000;
       return {
         text,
-        // Real large font — 700 22px default per Cesium label guidance (not scaled-up 10px)
-        font: opts.font || '700 22px Inter, Segoe UI, Arial, sans-serif',
-        fillColor: C.Color.fromCssColorString(fillCss || '#FFFFFF'),
-        outlineColor: C.Color.BLACK,
-        outlineWidth: opts.outlineWidth != null ? opts.outlineWidth : 3,
+        // Quiet Foundry-scale labels (not neon title stack)
+        font: opts.font || '600 13px "IBM Plex Sans", Segoe UI, Arial, sans-serif',
+        fillColor: C.Color.fromCssColorString(fillCss || '#D8DDE3'),
+        outlineColor: C.Color.fromCssColorString('#0B0D10'),
+        outlineWidth: opts.outlineWidth != null ? opts.outlineWidth : 2,
         style: C.LabelStyle.FILL_AND_OUTLINE,
         showBackground: true,
         backgroundColor: bg,
-        backgroundPadding: opts.backgroundPadding || new C.Cartesian2(14, 10),
-        pixelOffset: opts.pixelOffset || new C.Cartesian2(0, -34),
+        backgroundPadding: opts.backgroundPadding || new C.Cartesian2(8, 5),
+        pixelOffset: opts.pixelOffset || new C.Cartesian2(0, -28),
         eyeOffset: opts.eyeOffset || new C.Cartesian3(0.0, 0.0, -50.0),
         disableDepthTestDistance: opts.disableDepthTestDistance != null
           ? opts.disableDepthTestDistance
@@ -837,15 +837,17 @@ export default class CesiumScene {
       },
       label: clearLabel(
         `${w.legOrder}  ${w.name}`,
-        '#FFFFFF',
+        '#D8DDE3',
         {
-          font: '700 20px Inter, Segoe UI, Arial, sans-serif',
-          outlineWidth: 3,
+          font: '600 13px "IBM Plex Sans", Segoe UI, Arial, sans-serif',
+          outlineWidth: 2,
           pixelOffset: WP_OFFSETS[i % WP_OFFSETS.length],
           eyeOffset: new C.Cartesian3(0, 0, -40 - i * 8),
-          ddcFar: 750_000, // secondary: hide when very far
+          ddcFar: 650_000,
           primary: false,
-          backgroundPadding: new C.Cartesian2(12, 8),
+          backgroundPadding: new C.Cartesian2(8, 5),
+          bgCss: '#12151A',
+          bgAlpha: 0.92,
         },
       ),
       _wp: w,
@@ -864,51 +866,50 @@ export default class CesiumScene {
         pixelOffset: new C.Cartesian2(-8, 0),
       },
       label: clearLabel(
-        'CORRIDOR ORIGIN · BANDAR ABBAS',
-        '#FFFFFF',
+        'ORIGIN · BANDAR ABBAS',
+        '#D8DDE3',
         {
-          font: '700 20px Inter, Segoe UI, Arial, sans-serif',
-          outlineWidth: 3,
-          pixelOffset: new C.Cartesian2(0, 28),
+          font: '600 13px "IBM Plex Sans", Segoe UI, Arial, sans-serif',
+          outlineWidth: 2,
+          pixelOffset: new C.Cartesian2(0, 22),
           eyeOffset: new C.Cartesian3(0, 0, -60),
-          ddcFar: 1_200_000,
+          ddcFar: 900_000,
           primary: false,
-          bgCss: '#0A1018',
-          bgAlpha: 0.96,
+          bgCss: '#12151A',
+          bgAlpha: 0.92,
+          backgroundPadding: new C.Cartesian2(8, 5),
         },
       ),
       _site: LAUNCH_SITE,
     });
 
-    // impact site — PRIMARY strike label (highest priority, stays visible farthest)
+    // impact site — single quiet plate (no stacked DAYTIME STRIKE title farm)
     const impactCaption = (TIMELINE && TIMELINE.impactCaption) || 'STRIKE IMPACT — DAYLIGHT';
-    const eventTitle = (TIMELINE && (TIMELINE.eventTitle || TIMELINE.framingLabel)) || 'DAYTIME STRIKE';
-    const impactSubtitle = (TIMELINE && TIMELINE.impactSubtitle) || 'WARDA / JENNA · DAYLIGHT RECONSTRUCTION';
     v.entities.add({
       id: 'impact-site',
       position: carto(IMPACT_SITE.lon, IMPACT_SITE.lat, IMPACT_SITE.height),
       billboard: {
         image: MARKER_URIS.impact,
-        width: 48,
-        height: 56,
+        width: 36,
+        height: 42,
         verticalOrigin: C.VerticalOrigin.BOTTOM,
         disableDepthTestDistance: Number.POSITIVE_INFINITY,
-        pixelOffset: new C.Cartesian2(10, 0),
+        pixelOffset: new C.Cartesian2(8, 0),
       },
       label: clearLabel(
-        `${eventTitle}\n${impactCaption}\n${impactSubtitle}`,
-        '#FFFFFF',
+        `WARDA · ${impactCaption}`,
+        '#D8DDE3',
         {
-          font: '700 22px Inter, Segoe UI, Arial, sans-serif',
-          outlineWidth: 3,
-          pixelOffset: new C.Cartesian2(0, 30),
-          eyeOffset: new C.Cartesian3(0, 0, -80), // pull in front of other labels
-          ddcFar: 1_500_000, // primary: visible at corridor overview
+          font: '600 14px "IBM Plex Sans", Segoe UI, Arial, sans-serif',
+          outlineWidth: 2,
+          pixelOffset: new C.Cartesian2(0, 22),
+          eyeOffset: new C.Cartesian3(0, 0, -80),
+          ddcFar: 1_200_000,
           primary: true,
-          bgCss: '#03060F',
-          bgAlpha: 0.97,
-          backgroundPadding: new C.Cartesian2(16, 12),
-          scaleByDistance: new C.NearFarScalar(1_000, 1.2, 1_500_000, 0.95),
+          bgCss: '#12151A',
+          bgAlpha: 0.94,
+          backgroundPadding: new C.Cartesian2(10, 6),
+          scaleByDistance: new C.NearFarScalar(1_000, 1.05, 1_200_000, 0.75),
         },
       ),
       _site: IMPACT_SITE,

@@ -1,18 +1,20 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
+import {
+  Video, Crosshair, Eye, Map as MapIcon, Plane, Radar, Focus, Navigation,
+  Flame, Radio, Shield, Layers, Mic, MicOff, Play, Pause, RotateCcw,
+} from 'lucide-react';
 import CesiumScene from './cesium/CesiumScene.js';
 import { mountShahedInspector } from './three/Shahed136.js';
 import { SHAHED_SPECS } from './utils/geo.js';
 import {
   META, IMPACT_SITE, CORRIDOR_ORIGIN, CORRIDOR, GEOFENCE, STATS, CAMERA_MODES,
-  TIMELINE,
   analyzeThermal, VIIRS_DETECTIONS, INTEL, IMAGERY,
 } from './data/scenario.js';
-import {
-  LOGO, HUD_FRAME, CAM_ICONS, GEOFENCE_RING, THERMAL_ALERT, waypointMarker,
-} from './brand/assets.js';
+import { HUD_FRAME } from './brand/assets.js';
 
-// AIREV | OnDemand wordmark — rendered PURELY as styled text/CSS (no image
-// asset, no AI-generated graphic). Used in the classification banner + footer.
+// Official On Demand lockup (public/brand) — dark chrome uses inverted black PNG.
+const OD_LOGO_SRC = `${import.meta.env.BASE_URL || '/'}brand/od-logo-black.png`;
+
 const AirevWordmark = ({ className }) => (
   <span className={`airev-wordmark ${className || ''}`}>
     <span className="aw-airev">AIREV</span>
@@ -21,14 +23,92 @@ const AirevWordmark = ({ className }) => (
   </span>
 );
 
+const OdLogo = ({ className, height }) => (
+  <img
+    className={className || 'od-logo'}
+    src={OD_LOGO_SRC}
+    alt="On Demand"
+    height={height || 22}
+    draggable={false}
+  />
+);
+
 const Svg = ({ markup, className, style }) => (
   <span className={className} style={style} dangerouslySetInnerHTML={{ __html: markup }} />
 );
+
+// Lucide icons for camera modes (crisp 14–16px strokes)
+const CAM_LUCIDE = {
+  overview: MapIcon,
+  chase: Plane,
+  orbital: Navigation,
+  cockpit: Focus,
+  impact: Crosshair,
+  launch: Radar,
+  free: Eye,
+  tactical: Video,
+};
+
+// ---------------------------------------------------------------------------
+// LIVE AVM conversation (PRIMARY voice path)
+// Workflow: 6a7dc588fc1a4aa90e832ec4  ·  UXE Warda Strike AVM Narrator
+// Static MP3 / one-shot TTS briefing is DEMOTED — not the OPEN THE NET path.
+// Mic in (Web Speech API) → /api/avm/* proxy → agent turn → spoken reply out.
+// ---------------------------------------------------------------------------
+const AVM_WORKFLOW_ID = '6a7dc588fc1a4aa90e832ec4';
+// Demoted optional clip only (never auto-played; not OPEN THE NET primary).
+
+async function avmApi(path, body) {
+  const res = await fetch(path, {
+    method: body === undefined ? 'GET' : 'POST',
+    headers: body === undefined ? undefined : { 'Content-Type': 'application/json' },
+    body: body === undefined ? undefined : JSON.stringify(body),
+  });
+  let json = null;
+  try { json = await res.json(); } catch (_) { json = null; }
+  if (!res.ok) {
+    const msg = (json && (json.error || json.message)) || `HTTP ${res.status}`;
+    const err = new Error(msg);
+    err.status = res.status;
+    err.detail = json;
+    throw err;
+  }
+  return json;
+}
+
+function playRemoteAudio(url, audioEl) {
+  return new Promise((resolve, reject) => {
+    if (!url || !audioEl) {
+      resolve(false);
+      return;
+    }
+    const onEnd = () => { cleanup(); resolve(true); };
+    const onErr = (e) => { cleanup(); reject(e); };
+    const cleanup = () => {
+      audioEl.removeEventListener('ended', onEnd);
+      audioEl.removeEventListener('error', onErr);
+    };
+    audioEl.addEventListener('ended', onEnd);
+    audioEl.addEventListener('error', onErr);
+    audioEl.src = url;
+    audioEl.load();
+    const p = audioEl.play();
+    if (p && typeof p.then === 'function') {
+      p.catch((e) => { cleanup(); reject(e); });
+    }
+  });
+}
 
 export default function App() {
   const cesiumRef = useRef(null);
   const sceneRef = useRef(null);
   const inspectorRef = useRef(null);
+  const audioRef = useRef(null);
+  const recognitionRef = useRef(null);
+  const sessionIdRef = useRef(null);
+  const netOpenRef = useRef(false);
+  const listeningRef = useRef(false);
+  const processingRef = useRef(false);
 
   const [ready, setReady] = useState(false);
   const [playing, setPlaying] = useState(false);
@@ -42,7 +122,12 @@ export default function App() {
   const [clock, setClock] = useState('');                        // live UTC clock for the classification banner
   const [layers, setLayers] = useState({ corridor: true, geofence: true, waypoints: true });
   const [scenarioId, setScenarioId] = useState('baseline_monitor');
-  const [hoverNode, setHoverNode] = useState(null);
+  // Live AVM net state (primary). voicePlaying kept as alias of net open for CSS.
+  const [netOpen, setNetOpen] = useState(false);
+  const [voicePhase, setVoicePhase] = useState('idle'); // idle|connecting|speaking|listening|thinking|error
+  const [voiceError, setVoiceError] = useState('');
+  const [voiceCaption, setVoiceCaption] = useState('');
+  const [lastHeard, setLastHeard] = useState('');
 
   // Illustrative resilience scenario chips (NOT confirmed intelligence)
   const SCENARIOS = [
@@ -52,23 +137,6 @@ export default function App() {
     { id: 'multi_node_lag', name: 'Multi-node lag', det: 16.8, resp: 57.9, disr: 0.83, rec: 8.9, risk: 0.49 },
   ];
   const scenario = SCENARIOS.find((s) => s.id === scenarioId) || SCENARIOS[0];
-  // Blend illustrative KPIs with live progress so tiles update while the sim runs
-  const ease = progress * progress * (3 - 2 * progress);
-  const kpis = {
-    det: +(5.5 + (scenario.det - 5.5) * ease).toFixed(1),
-    resp: +(12 + (scenario.resp - 12) * ease).toFixed(1),
-    disr: +(0.05 + (scenario.disr - 0.05) * ease).toFixed(2),
-    rec: +(2.0 + (scenario.rec - 2.0) * ease).toFixed(1),
-    risk: +(0.04 + (scenario.risk - 0.04) * ease).toFixed(2),
-  };
-  const riskChip = kpis.risk >= 0.35 ? 'CONTAIN' : kpis.risk >= 0.15 ? 'MONITOR' : 'RESTORE';
-
-  const WATCH_NODES = [
-    { id: 'ORIGIN', label: 'ORIGIN', y: 12, tip: `Corridor origin ${CORRIDOR_ORIGIN.lat}, ${CORRIDOR_ORIGIN.lon}` },
-    { id: 'MWR-APT', label: 'MWR-APT', y: 38, tip: 'Municipal watch node (assumed role) — ILLUSTRATIVE' },
-    { id: 'SWM', label: 'SWM', y: 64, tip: 'Sector warning link (assumed) — ILLUSTRATIVE' },
-    { id: 'SITE', label: 'SITE', y: 90, tip: `${IMPACT_SITE.address} · ${IMPACT_SITE.lat}, ${IMPACT_SITE.lon}` },
-  ];
 
   const thermalReport = analyzeThermal(VIIRS_DETECTIONS);
 
@@ -124,13 +192,239 @@ export default function App() {
     setPlaying(!!on);
   }, [playing]);
 
+  // ---- Live AVM conversation helpers ------------------------------------
+  const stopRecognition = useCallback(() => {
+    try {
+      const rec = recognitionRef.current;
+      if (rec) {
+        rec.onresult = null;
+        rec.onerror = null;
+        rec.onend = null;
+        try { rec.stop(); } catch (_) {}
+        try { rec.abort(); } catch (_) {}
+      }
+    } catch (_) {}
+    recognitionRef.current = null;
+    listeningRef.current = false;
+  }, []);
+
+  const stopNetAudio = useCallback(() => {
+    try {
+      const el = audioRef.current;
+      if (el) {
+        el.pause();
+        el.removeAttribute('src');
+        el.load();
+      }
+    } catch (_) {}
+  }, []);
+
+  const closeTheNet = useCallback(() => {
+    netOpenRef.current = false;
+    processingRef.current = false;
+    stopRecognition();
+    stopNetAudio();
+    setNetOpen(false);
+    setVoicePhase('idle');
+    setVoiceError('');
+    // keep last captions for after-action review
+  }, [stopRecognition, stopNetAudio]);
+
+  const handleUserUtterance = useCallback(async (text) => {
+    const sessionId = sessionIdRef.current;
+    if (!netOpenRef.current || !sessionId || processingRef.current) return;
+    const cleaned = String(text || '').trim();
+    if (!cleaned) return;
+    processingRef.current = true;
+    listeningRef.current = false;
+    stopRecognition();
+    setLastHeard(cleaned);
+    setVoiceCaption(`YOU: ${cleaned}`);
+    setVoicePhase('thinking');
+    setVoiceError('');
+    try {
+      const turn = await avmApi('/api/avm/turn', { sessionId, text: cleaned });
+      if (!netOpenRef.current) return;
+      const answer = (turn && turn.answer) || '';
+      setVoiceCaption(answer ? `NET: ${answer}` : 'NET: (no spoken reply)');
+      if (turn && turn.audioUrl && audioRef.current && netOpenRef.current) {
+        setVoicePhase('speaking');
+        try {
+          await playRemoteAudio(turn.audioUrl, audioRef.current);
+        } catch (e) {
+          // eslint-disable-next-line no-console
+          console.warn('[App] reply audio play failed', e);
+        }
+      }
+      if (netOpenRef.current) {
+        // resume listening for the next turn
+        // startListening is defined below; call via ref pattern after both exist
+        processingRef.current = false;
+        setVoicePhase('listening');
+        // deferred start to avoid race with audio end
+        setTimeout(() => {
+          if (netOpenRef.current && !processingRef.current) {
+            // eslint-disable-next-line no-use-before-define
+            startListeningRef.current && startListeningRef.current();
+          }
+        }, 250);
+      }
+    } catch (err) {
+      processingRef.current = false;
+      if (!netOpenRef.current) return;
+      setVoicePhase('error');
+      setVoiceError(err?.message || 'Agent turn failed');
+      // try to resume listening so the net stays open
+      setTimeout(() => {
+        if (netOpenRef.current) {
+          setVoicePhase('listening');
+          // eslint-disable-next-line no-use-before-define
+          startListeningRef.current && startListeningRef.current();
+        }
+      }, 800);
+    }
+  }, [stopRecognition]);
+
+  const startListeningRef = useRef(null);
+
+  const startListening = useCallback(() => {
+    if (!netOpenRef.current || processingRef.current) return;
+    const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SR) {
+      setVoiceError('Browser has no SpeechRecognition — type is not available; use Chrome/Edge for mic.');
+      setVoicePhase('error');
+      return;
+    }
+    stopRecognition();
+    let rec;
+    try {
+      rec = new SR();
+    } catch (e) {
+      setVoiceError('Mic recognition unavailable in this browser.');
+      setVoicePhase('error');
+      return;
+    }
+    rec.lang = 'en-US';
+    rec.continuous = false;
+    rec.interimResults = false;
+    rec.maxAlternatives = 1;
+    rec.onresult = (ev) => {
+      try {
+        const t = ev?.results?.[0]?.[0]?.transcript || '';
+        if (t) handleUserUtterance(t);
+      } catch (_) {}
+    };
+    rec.onerror = (ev) => {
+      const code = ev?.error || 'mic_error';
+      if (!netOpenRef.current) return;
+      if (code === 'no-speech' || code === 'aborted') {
+        // quietly restart while net is open
+        if (!processingRef.current) {
+          setTimeout(() => {
+            if (netOpenRef.current && !processingRef.current) startListeningRef.current && startListeningRef.current();
+          }, 300);
+        }
+        return;
+      }
+      if (code === 'not-allowed' || code === 'service-not-allowed') {
+        setVoiceError('Microphone permission denied — allow mic, then OPEN THE NET again.');
+        setVoicePhase('error');
+        return;
+      }
+      setVoiceError(`Mic: ${code}`);
+      setTimeout(() => {
+        if (netOpenRef.current && !processingRef.current) startListeningRef.current && startListeningRef.current();
+      }, 600);
+    };
+    rec.onend = () => {
+      listeningRef.current = false;
+      // auto-restart while net open and not processing a turn
+      if (netOpenRef.current && !processingRef.current) {
+        setTimeout(() => {
+          if (netOpenRef.current && !processingRef.current) startListeningRef.current && startListeningRef.current();
+        }, 220);
+      }
+    };
+    recognitionRef.current = rec;
+    try {
+      rec.start();
+      listeningRef.current = true;
+      setVoicePhase('listening');
+    } catch (e) {
+      // start() throws if already started — ignore
+    }
+  }, [handleUserUtterance, stopRecognition]);
+
+  startListeningRef.current = startListening;
+
+  // OPEN THE NET — start live two-way AVM conversation (NOT static MP3).
+  const toggleVoiceBriefing = useCallback(async () => {
+    setVoiceError('');
+    if (netOpenRef.current) {
+      closeTheNet();
+      return;
+    }
+    // open the net
+    netOpenRef.current = true;
+    setNetOpen(true);
+    setVoicePhase('connecting');
+    setVoiceCaption('Opening live net with AVM narrator…');
+    setLastHeard('');
+    try {
+      // health first (surfaces missing API key clearly)
+      try {
+        const h = await avmApi('/api/avm/health');
+        if (h && h.hasApiKey === false) {
+          throw new Error('Server missing ON_DEMAND_API_KEY — cannot open live net.');
+        }
+      } catch (e) {
+        if (e?.message?.includes('ON_DEMAND_API_KEY')) throw e;
+        // health optional if route cold
+      }
+      const sess = await avmApi('/api/avm/session', {});
+      if (!netOpenRef.current) return;
+      sessionIdRef.current = sess.sessionId;
+      const starter = sess.conversationStarter || 'Live net open. Speak your question.';
+      setVoiceCaption(`NET: ${starter}`);
+      if (sess.starterAudioUrl && audioRef.current) {
+        setVoicePhase('speaking');
+        try {
+          await playRemoteAudio(sess.starterAudioUrl, audioRef.current);
+        } catch (e) {
+          // eslint-disable-next-line no-console
+          console.warn('[App] starter audio play failed', e);
+        }
+      }
+      if (!netOpenRef.current) return;
+      setVoicePhase('listening');
+      startListening();
+    } catch (err) {
+      // eslint-disable-next-line no-console
+      console.warn('[App] open net failed', err);
+      netOpenRef.current = false;
+      setNetOpen(false);
+      setVoicePhase('error');
+      setVoiceError(err?.message || 'Failed to open live AVM net');
+      stopRecognition();
+      stopNetAudio();
+    }
+  }, [closeTheNet, startListening, stopRecognition, stopNetAudio]);
+
+  // cleanup on unmount
+  useEffect(() => () => {
+    netOpenRef.current = false;
+    stopRecognition();
+    stopNetAudio();
+  }, [stopRecognition, stopNetAudio]);
+
   const onReset = useCallback(() => {
     sceneRef.current?.setPlaying(false);
     setPlaying(false);
     const r = sceneRef.current?.setProgress(0);
     setProgress(0);
     if (r) setReadout(r);
-  }, []);
+    closeTheNet();
+  }, [closeTheNet]);
 
   const pickScenario = useCallback((id) => {
     setScenarioId(id);
@@ -198,11 +492,11 @@ export default function App() {
 
   return (
     <div className="app">
-      {/* classification-style top banner (MoD presentation grade) */}
+      {/* thin classification banner */}
       <div className="classbar" role="banner">
-        <span className="cls-tag">UNCLASSIFIED // DEFENSIVE BRIEFING · PREVENTIVE</span>
+        <span className="cls-tag">UNCLASSIFIED // DEFENSIVE BRIEFING</span>
         <span className="cls-mid">
-          <AirevWordmark /> <span className="cls-sys">SENTINEL RESILIENCE · IMP-08</span>
+          <span className="cls-sys">SENTINEL · IMP-08</span>
         </span>
         <span className="cls-tag cls-right">
           <span className="cls-live"><span className="cls-dot" />{ready ? 'LIVE' : 'INIT'}</span>
@@ -210,80 +504,22 @@ export default function App() {
         </span>
       </div>
 
-      {/* full-screen brand HUD frame */}
+      {/* quiet frame overlay */}
       <Svg markup={HUD_FRAME} className="hud-frame" />
 
       {/* Cesium globe */}
       <div ref={cesiumRef} className="cesium-host" />
       {thermal && <div className="thermal-overlay" />}
 
-      {/* Dark-theme corridor watch diagram — v3 high-clarity Southern Gulf timeline */}
-      <div className="corridor-overlay" aria-label="Al Warqa corridor watch nodes — daytime strike">
-        <div className="co-header">
-          <span className="co-header-kicker">{TIMELINE?.eventTitle || TIMELINE?.framingLabel || 'DAYTIME STRIKE'}</span>
-          <span className="co-header-main">3 · SOUTHERN GULF → UAE COAST · TACTICAL CORRIDOR</span>
-          <span className="co-header-sub">TANKER / UAE COAST · WATCH NODES · ILLUSTRATIVE</span>
-          <span className="co-header-day">DEFENSIVE BRIEFING · DAYLIGHT RECONSTRUCTION</span>
-          <span className="co-header-clock">{TIMELINE?.secondaryClockLabel || 'MIDDAY LOCAL · 12:00 GST'}</span>
-        </div>
-        <div className="co-body">
-          <div className="co-amber-band" aria-hidden="true" />
-          <div className="co-route" />
-          <div className="co-scan" />
-          <div className="co-playhead" style={{ top: `${8 + progress * 78}%` }} title="Status" />
-          {/* Yellow status marker (center-right of timeline) */}
-          <span className="co-status-dot" style={{ top: `${8 + progress * 78}%` }} aria-hidden="true" />
-          {WATCH_NODES.map((n) => (
-            <button
-              key={n.id}
-              type="button"
-              className={`co-node ${hoverNode === n.id ? 'on' : ''} ${n.id === 'SITE' ? 'co-node-primary' : ''}`}
-              style={{ top: `${n.y}%` }}
-              title={n.tip}
-              onMouseEnter={() => setHoverNode(n.id)}
-              onMouseLeave={() => setHoverNode(null)}
-              onClick={() => setHoverNode(n.id)}
-            >
-              <span className="co-dot" />
-              <span className={`co-plate ${n.id === 'MWR-APT' ? 'slate' : n.id === 'SWM' || n.id === 'SITE' ? 'mint' : ''}`}>
-                {n.id === 'MWR-APT' ? 'MWR-APT NODE' : n.id === 'SWM' ? 'SWM LINK' : n.id === 'SITE' ? 'WARDA / JENNA · SITE' : 'ORIGIN'}
-              </span>
-            </button>
-          ))}
-          {/* Magenta strike-impact caption — DAYLIGHT rename (not night clock) */}
-          <div className="co-strike-caption" role="note">
-            <span className="co-strike-title">{TIMELINE?.eventTitle || 'DAYTIME STRIKE'}</span>
-            <span className="co-strike-impact">{TIMELINE?.impactCaption || 'STRIKE IMPACT — DAYLIGHT'}</span>
-          </div>
-        </div>
-        {hoverNode && (
-          <div className="co-tip">{WATCH_NODES.find((n) => n.id === hoverNode)?.tip}</div>
-        )}
-      </div>
-
-      {/* Illustrative KPI plates — update while sim runs */}
-      <div className="kpi-strip" role="region" aria-label="Illustrative resilience metrics">
-        {[
-          { t: 'DETECTION TIME', v: kpis.det, u: 'min' },
-          { t: 'RESPONSE TIME', v: kpis.resp, u: 'min' },
-          { t: 'DISRUPTION', v: kpis.disr, u: '' },
-          { t: 'RECOVERY', v: kpis.rec, u: 'h' },
-          { t: 'RESIDUAL RISK', v: kpis.risk, u: '' },
-        ].map((m) => (
-          <div key={m.t} className="kpi-card">
-            <div className="kpi-t">{m.t}</div>
-            <div className="kpi-v">{m.v}<span className="kpi-u">{m.u}</span></div>
-          </div>
-        ))}
-        <div className={`kpi-chip st-${riskChip.toLowerCase()}`}>{riskChip}</div>
-      </div>
-
-      {/* top brand bar */}
+      {/* application bar — official On Demand lockup */}
       <header className="topbar">
-        <Svg markup={LOGO} className="logo" />
+        <div className="brand-lockup">
+          <OdLogo />
+          <span className="airev-micro">AIREV</span>
+        </div>
         <div className="title-block">
-          <div className="t1">IMP-08 · UAE DEFENSIVE COMMAND CENTER · RESILIENCE THEATRE</div>
-          <div className="t2">Early-warning · infrastructure dependency · recovery readiness · ILLUSTRATIVE corridor awareness</div>
+          <div className="t1">IMP-08 · DEFENSIVE COMMAND · RESILIENCE THEATRE</div>
+          <div className="t2">Early-warning · infrastructure dependency · recovery readiness · ILLUSTRATIVE</div>
         </div>
         <div className="badge">
           <span className="dot" /> {ready ? 'LIVE' : 'INIT'}
@@ -293,23 +529,26 @@ export default function App() {
       {/* left: camera modes + waypoints */}
       <aside className="left-rail">
         <div className="panel">
-          <div className="panel-h">CAMERA MODES</div>
+          <div className="panel-h"><Video size={14} className="ph-ico" strokeWidth={1.75} /> Camera modes</div>
           <div className="cam-grid">
-            {CAMERA_MODES.map((m) => (
-              <button key={m.id} className={`cam-btn ${camMode === m.id ? 'on' : ''}`} title={m.hint} onClick={() => pickCam(m.id)}>
-                <Svg markup={CAM_ICONS[m.icon]} className="cam-ico" />
-                <span>{m.name}</span>
-              </button>
-            ))}
+            {CAMERA_MODES.map((m) => {
+              const Icon = CAM_LUCIDE[m.icon] || CAM_LUCIDE[m.id] || Eye;
+              return (
+                <button key={m.id} className={`cam-btn ${camMode === m.id ? 'on' : ''}`} title={m.hint} onClick={() => pickCam(m.id)}>
+                  <span className="cam-ico"><Icon size={14} strokeWidth={1.75} /></span>
+                  <span>{m.name}</span>
+                </button>
+              );
+            })}
           </div>
         </div>
 
         <div className="panel">
-          <div className="panel-h">CORRIDOR NAV · WATCH STOPS</div>
+          <div className="panel-h"><Navigation size={14} className="ph-ico" strokeWidth={1.75} /> Corridor nav</div>
           <div className="wp-list">
             {wp.map((w, i) => (
               <button key={w.id} className={`wp-row ${activeWp === i ? 'on' : ''}`} onClick={() => goWp(i)}>
-                <Svg markup={waypointMarker(w.legOrder, activeWp === i)} className="wp-pin" />
+                <span className="wp-pin"><span className="wp-num">{w.legOrder}</span></span>
                 <div className="wp-meta">
                   <div className="wp-name">{w.name}</div>
                   <div className="wp-phase">{w.phase} · {w.lat.toFixed(3)}, {w.lon.toFixed(3)}</div>
@@ -320,7 +559,7 @@ export default function App() {
         </div>
 
         <div className="panel">
-          <div className="panel-h">RESILIENCE SCENARIOS · ILLUSTRATIVE</div>
+          <div className="panel-h"><Shield size={14} className="ph-ico" strokeWidth={1.75} /> Scenarios · illustrative</div>
           <div className="scenario-chips">
             {SCENARIOS.map((s) => (
               <button
@@ -348,9 +587,9 @@ export default function App() {
       {/* right: impact + telemetry + geofence + thermal + intel + imagery + ion */}
       <aside className="right-rail">
         <div className="panel">
-          <div className="panel-h">PROTECTED SITE · AL WARQA</div>
+          <div className="panel-h"><Crosshair size={14} className="ph-ico" strokeWidth={1.75} /> Protected site · Al Warqa</div>
           <img className="hero-img" src={IMAGERY.droneHero} alt="Al Warqa infrastructure context — 3D satellite capture" />
-          <div className="context-headline">AL WARQA, DUBAI — INFRASTRUCTURE CONTEXT (3D SATELLITE)</div>
+          <div className="context-headline">Al Warqa, Dubai — infrastructure context</div>
           <div className="hero-strip">
             {IMAGERY.heroVariations.map((src, i) => (
               <figure key={i} className="hero-thumb">
@@ -369,7 +608,7 @@ export default function App() {
         </div>
 
         <div className="panel">
-          <div className="panel-h">LIVE TELEMETRY · AWARENESS</div>
+          <div className="panel-h"><Radio size={14} className="ph-ico" strokeWidth={1.75} /> Telemetry</div>
           <div className="kv"><span>Phase</span><b>{readout?.phase || 'Launch'}</b></div>
           <div className="kv"><span>Leg</span><b>{readout?.legFrom} → {readout?.legTo}</b></div>
           <div className="kv"><span>Altitude</span><b>{fmt((readout?.altM || 0) / 1000, 2)} km</b></div>
@@ -379,14 +618,14 @@ export default function App() {
           <div className="kv"><span>Dive angle</span><b className={readout?.divePitchDeg > 5 ? 'alert' : ''}>{fmt(readout?.divePitchDeg, 1)}°</b></div>
           <div className="kv"><span>ETA</span><b>{fmt(readout?.etaMin)} min</b></div>
           <div className="inspector" ref={inspectorRef}>
-            <div className="insp-cap">AIRFRAME INSPECTOR · AWARENESS TRACK</div>
+            <div className="insp-cap">Airframe inspector</div>
           </div>
         </div>
 
         <div className="panel">
-          <div className="panel-h">ENDURANCE GEOFENCE</div>
+          <div className="panel-h"><Shield size={14} className="ph-ico" strokeWidth={1.75} /> Endurance geofence</div>
           <div className="geo-row">
-            <Svg markup={GEOFENCE_RING} className="geo-ring" />
+            <span className="geo-ring"><Radar size={28} strokeWidth={1.5} /></span>
             <div>
               <div className="big">{GEOFENCE.radiusKm} km</div>
               <div className="sub">endurance-derived detection ring</div>
@@ -397,10 +636,10 @@ export default function App() {
         </div>
 
         <div className="panel">
-          <div className="panel-h">THERMAL / IR · VIIRS</div>
+          <div className="panel-h"><Flame size={14} className="ph-ico" strokeWidth={1.75} /> Thermal / IR · VIIRS</div>
           <button className={`wide-btn ${thermal ? 'on' : ''}`} onClick={toggleThermal}>
-            <Svg markup={THERMAL_ALERT} className="ta-ico" />
-            {thermal ? 'THERMAL MODE: ON' : 'ENABLE THERMAL MODE'}
+            <span className="ta-ico"><Flame size={14} strokeWidth={1.75} /></span>
+            {thermal ? 'Thermal mode: on' : 'Enable thermal mode'}
           </button>
           <div className="kv"><span>Detections</span><b>{thermalReport.total}</b></div>
           <div className="kv"><span>Flagged</span><b className="alert">{thermalReport.flagged} suspicious</b></div>
@@ -410,7 +649,7 @@ export default function App() {
         </div>
 
         <div className="panel">
-          <div className="panel-h">SHAHED-136 · REAL SPECS (SOURCED)</div>
+          <div className="panel-h"><Plane size={14} className="ph-ico" strokeWidth={1.75} /> Shahed-136 · specs</div>
           <div className="kv"><span>Designation</span><b>{SHAHED_SPECS.designation}</b></div>
           <div className="kv"><span>Cruise speed</span><b>{SHAHED_SPECS.cruiseSpeedKmh}</b></div>
           <div className="kv"><span>Range</span><b>{SHAHED_SPECS.rangeKm}</b></div>
@@ -425,13 +664,13 @@ export default function App() {
         </div>
 
         <div className="panel">
-          <div className="panel-h">TERMINAL APPROACH · AL WARQA</div>
+          <div className="panel-h"><MapIcon size={14} className="ph-ico" strokeWidth={1.75} /> Terminal approach</div>
           <img className="overlay-img" src={IMAGERY.backdrop.dubai3d} alt="Dubai 3D photorealistic corridor capture" />
           <div className="muted small">Real 3D photorealistic capture over the Dubai corridor. Physics-modelled ballistic terminal dive (~-62°) converges on Jenna Apartments (Warda), Al Warqa (25.1858, 55.4045).</div>
         </div>
 
         <div className="panel">
-          <div className="panel-h">MAP LAYERS · LIVE / NO-KEY</div>
+          <div className="panel-h"><Layers size={14} className="ph-ico" strokeWidth={1.75} /> Map layers</div>
           <div className="seg">
             <button className={`seg-btn ${imageryMode === 'satellite' ? 'on' : ''}`} onClick={() => pickImagery('satellite')}>
               SATELLITE
@@ -447,6 +686,9 @@ export default function App() {
         </div>
       </aside>
 
+      {/* Live AVM reply playback element — src set dynamically; NOT the static MP3 */}
+      <audio ref={audioRef} preload="none" />
+
       {/* bottom transport */}
       <footer className="transport">
         <div className="layers">
@@ -454,11 +696,30 @@ export default function App() {
             <button key={l} className={`chip ${layers[l] ? 'on' : ''}`} onClick={() => toggleLayer(l)}>{l}</button>
           ))}
         </div>
-        <button className="play" onClick={togglePlay}>{playing ? '❚❚ PAUSE' : '▶ RUN AWARENESS'}</button>
-        <button className="reset-btn" type="button" onClick={onReset}>↺ RESET</button>
+        <button
+          className={`voice-brief ${netOpen ? 'on' : ''} phase-${voicePhase}`}
+          type="button"
+          onClick={toggleVoiceBriefing}
+          title={`Live two-way AVM · workflow ${AVM_WORKFLOW_ID} · DeepSeek V4 Flash (mic in / spoken replies). Not TTS/STS/MP3 primary.`}
+        >
+          {netOpen
+            ? <><MicOff size={13} strokeWidth={1.75} /> {voicePhase === 'listening' ? 'Close · listening' : voicePhase === 'thinking' ? 'Close · thinking' : voicePhase === 'speaking' ? 'Close · speaking' : voicePhase === 'connecting' ? 'Close · connecting' : 'Close the net'}</>
+            : <><Mic size={13} strokeWidth={1.75} /> Open the net</>}
+        </button>
+        <button className="play" onClick={togglePlay}>{playing ? <><Pause size={13} strokeWidth={1.75} /> Pause</> : <><Play size={13} strokeWidth={1.75} /> Run awareness</>}</button>
+        <button className="reset-btn" type="button" onClick={onReset}><RotateCcw size={12} strokeWidth={1.75} /> Reset</button>
         <input className="scrub" type="range" min="0" max="1" step="0.001" value={progress} onChange={onScrub} />
         <div className="prog">{Math.round(progress * 100)}%</div>
         <div className="scenario-tag">{scenario.name}</div>
+        {voiceCaption && (
+          <div className={`voice-caption phase-${voicePhase}`} role="status" title={voiceCaption}>
+            {voiceCaption}
+          </div>
+        )}
+        {lastHeard && netOpen && (
+          <div className="voice-heard" title={lastHeard}>heard: {lastHeard}</div>
+        )}
+        {voiceError && <div className="voice-err" role="status">{voiceError}</div>}
         <div className="stats">
           <span>{STATS.owaDrones} OWA</span><span>{STATS.ballisticMissiles} BM</span><span>{STATS.durationDays}-day</span>
         </div>
@@ -488,7 +749,8 @@ export default function App() {
       )}
 
       <div className="footer-brand">
-        <AirevWordmark /> <span className="fb-sub">Defensive Resilience · Sentinel Command Center · ILLUSTRATIVE KPIs</span>
+        <OdLogo className="fb-logo" height={14} />
+        <span className="fb-sub">Defensive resilience · sentinel · ILLUSTRATIVE</span>
       </div>
     </div>
   );
