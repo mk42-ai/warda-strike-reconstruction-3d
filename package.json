@@ -12,6 +12,7 @@
   "dependencies": {
     "@fontsource/ibm-plex-mono": "^5.3.0",
     "@fontsource/ibm-plex-sans": "^5.3.0",
+    "@fontsource/inter": "^5.3.0",
     "cannon-es": "0.20.0",
     "cesium": "1.122.0",
     "lucide-react": "^1.31.0",

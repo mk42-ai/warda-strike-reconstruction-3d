@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState, useCallback } from 'react';
 import {
   Video, Crosshair, Eye, Map as MapIcon, Plane, Radar, Focus, Navigation,
   Flame, Radio, Shield, Layers, Mic, MicOff, Play, Pause, RotateCcw,
+  Clock, Building2, FileText, BookOpen, Globe2, Target, Waypoints,
 } from 'lucide-react';
 import CesiumScene from './cesium/CesiumScene.js';
 import { mountShahedInspector } from './three/Shahed136.js';
@@ -12,8 +13,9 @@ import {
 } from './data/scenario.js';
 import { HUD_FRAME } from './brand/assets.js';
 
-// Official On Demand lockup (public/brand) — dark chrome uses inverted black PNG.
-const OD_LOGO_SRC = `${import.meta.env.BASE_URL || '/'}brand/od-logo-black.png`;
+// Official On Demand lockup — prefer logo_header / logo_dark for dark chrome.
+const OD_LOGO_SRC = `${import.meta.env.BASE_URL || '/'}brand/logo-header.png`;
+const OD_LOGO_FALLBACK = `${import.meta.env.BASE_URL || '/'}brand/od-logo-black.png`;
 
 const AirevWordmark = ({ className }) => (
   <span className={`airev-wordmark ${className || ''}`}>
@@ -30,8 +32,19 @@ const OdLogo = ({ className, height }) => (
     alt="On Demand"
     height={height || 22}
     draggable={false}
+    onError={(e) => {
+      if (e.currentTarget.src !== OD_LOGO_FALLBACK) e.currentTarget.src = OD_LOGO_FALLBACK;
+    }}
   />
 );
+
+const TABS = [
+  { id: 'theatre', label: 'Theatre', Icon: Globe2 },
+  { id: 'timeline', label: 'Timeline', Icon: Clock },
+  { id: 'entities', label: 'Entities', Icon: Target },
+  { id: 'briefing', label: 'Briefing', Icon: FileText },
+  { id: 'sources', label: 'Sources', Icon: BookOpen },
+];
 
 const Svg = ({ markup, className, style }) => (
   <span className={className} style={style} dangerouslySetInnerHTML={{ __html: markup }} />
@@ -122,6 +135,7 @@ export default function App() {
   const [clock, setClock] = useState('');                        // live UTC clock for the classification banner
   const [layers, setLayers] = useState({ corridor: true, geofence: true, waypoints: true });
   const [scenarioId, setScenarioId] = useState('baseline_monitor');
+  const [activeTab, setActiveTab] = useState('theatre');
   // Live AVM net state (primary). voicePlaying kept as alias of net open for CSS.
   const [netOpen, setNetOpen] = useState(false);
   const [voicePhase, setVoicePhase] = useState('idle'); // idle|connecting|speaking|listening|thinking|error
@@ -490,43 +504,154 @@ export default function App() {
   const wp = CORRIDOR.waypoints;
   const fmt = (n, d = 1) => (n == null ? '—' : Number(n).toFixed(d));
 
+  const theatreActive = activeTab === 'theatre';
+
   return (
     <div className="app">
-      {/* thin classification banner */}
-      <div className="classbar" role="banner">
-        <span className="cls-tag">UNCLASSIFIED // DEFENSIVE BRIEFING</span>
-        <span className="cls-mid">
-          <span className="cls-sys">SENTINEL · IMP-08</span>
-        </span>
-        <span className="cls-tag cls-right">
+      {/* 40–48px Foundry application bar */}
+      <header className="appbar" role="banner">
+        <div className="brand-lockup">
+          <OdLogo height={22} />
+          <span className="airev-micro">AIREV</span>
+        </div>
+        <div className="title-block">
+          <div className="t1">IMP-08 · SENTINEL</div>
+          <div className="t2">UAE DEFENSIVE COMMAND CENTER · ILLUSTRATIVE</div>
+        </div>
+        <div className="appbar-right">
+          <span className="cls-tag">UNCLASSIFIED // DEFENSIVE</span>
           <span className="cls-live"><span className="cls-dot" />{ready ? 'LIVE' : 'INIT'}</span>
           <span className="cls-clock">{clock}</span>
-        </span>
-      </div>
+        </div>
+      </header>
+
+      {/* Tab strip — Theatre default; others chrome-only placeholders */}
+      <nav className="tabstrip" role="tablist" aria-label="Workstation views">
+        {TABS.map((t) => {
+          const Icon = t.Icon;
+          return (
+            <button
+              key={t.id}
+              type="button"
+              role="tab"
+              aria-selected={activeTab === t.id}
+              className={`tab-btn ${activeTab === t.id ? 'on' : ''}`}
+              onClick={() => setActiveTab(t.id)}
+            >
+              <span className="tab-ico"><Icon size={12} strokeWidth={1.75} /></span>
+              {t.label}
+            </button>
+          );
+        })}
+      </nav>
+
+      {/* 48px monochrome left object rail — maps existing handlers */}
+      <aside className="object-rail" aria-label="Object rail">
+        <div className="or-group">
+          {CAMERA_MODES.slice(0, 4).map((m) => {
+            const Icon = CAM_LUCIDE[m.icon] || CAM_LUCIDE[m.id] || Eye;
+            return (
+              <button
+                key={m.id}
+                type="button"
+                className={`or-btn ${camMode === m.id ? 'on' : ''}`}
+                onClick={() => pickCam(m.id)}
+                title={m.hint || m.name}
+              >
+                <Icon size={16} strokeWidth={1.6} />
+                <span className="or-tip">{m.name}</span>
+              </button>
+            );
+          })}
+        </div>
+        <div className="or-sep" />
+        <div className="or-group">
+          <button type="button" className={`or-btn ${camMode === 'impact' ? 'on' : ''}`} onClick={() => pickCam('impact')} title="Protected site">
+            <Building2 size={16} strokeWidth={1.6} />
+            <span className="or-tip">Protected site</span>
+          </button>
+          <button type="button" className={`or-btn ${thermal ? 'on' : ''}`} onClick={toggleThermal} title="Thermal / IR">
+            <Flame size={16} strokeWidth={1.6} />
+            <span className="or-tip">Thermal / IR</span>
+          </button>
+          <button type="button" className={`or-btn ${layers.corridor ? 'on' : ''}`} onClick={() => toggleLayer('corridor')} title="Corridor layer">
+            <Waypoints size={16} strokeWidth={1.6} />
+            <span className="or-tip">Corridor</span>
+          </button>
+          <button type="button" className={`or-btn ${layers.geofence ? 'on' : ''}`} onClick={() => toggleLayer('geofence')} title="Geofence ring">
+            <Radar size={16} strokeWidth={1.6} />
+            <span className="or-tip">Geofence</span>
+          </button>
+          <button type="button" className={`or-btn ${layers.waypoints ? 'on' : ''}`} onClick={() => toggleLayer('waypoints')} title="Waypoints">
+            <Navigation size={16} strokeWidth={1.6} />
+            <span className="or-tip">Waypoints</span>
+          </button>
+        </div>
+        <div className="or-sep" />
+        <div className="or-group">
+          <button type="button" className={`or-btn ${imageryMode === 'dark' ? 'on' : ''}`} onClick={() => pickImagery(imageryMode === 'dark' ? 'satellite' : 'dark')} title="Basemap">
+            <Layers size={16} strokeWidth={1.6} />
+            <span className="or-tip">Basemap</span>
+          </button>
+          <button type="button" className={`or-btn ${netOpen ? 'on' : ''}`} onClick={toggleVoiceBriefing} title="Open the net">
+            {netOpen ? <MicOff size={16} strokeWidth={1.6} /> : <Mic size={16} strokeWidth={1.6} />}
+            <span className="or-tip">{netOpen ? 'Close net' : 'Open the net'}</span>
+          </button>
+        </div>
+      </aside>
 
       {/* quiet frame overlay */}
       <Svg markup={HUD_FRAME} className="hud-frame" />
 
-      {/* Cesium globe */}
-      <div ref={cesiumRef} className="cesium-host" />
-      {thermal && <div className="thermal-overlay" />}
+      {/* Cesium globe — always mounted so scene state is preserved across tabs */}
+      <div ref={cesiumRef} className="cesium-host" style={{ visibility: theatreActive ? 'visible' : 'hidden' }} />
+      {thermal && theatreActive && <div className="thermal-overlay" />}
 
-      {/* application bar — official On Demand lockup */}
-      <header className="topbar">
-        <div className="brand-lockup">
-          <OdLogo />
-          <span className="airev-micro">AIREV</span>
-        </div>
-        <div className="title-block">
-          <div className="t1">IMP-08 · DEFENSIVE COMMAND · RESILIENCE THEATRE</div>
-          <div className="t2">Early-warning · infrastructure dependency · recovery readiness · ILLUSTRATIVE</div>
-        </div>
-        <div className="badge">
-          <span className="dot" /> {ready ? 'LIVE' : 'INIT'}
-        </div>
-      </header>
+      {/* Non-theatre chrome panes (placeholders; no logic change) */}
+      {!theatreActive && (
+        <aside className="left-rail" style={{ left: 'calc(var(--obj-rail-w) + var(--chrome-gap))', right: 'var(--chrome-gap)', width: 'auto' }}>
+          <div className="tab-pane panel">
+            {activeTab === 'timeline' && (
+              <>
+                <h3>Timeline · illustrative</h3>
+                <p>Playback transport remains on the bottom bar. Use Run awareness / scrub to walk launch → impact. Figures are reconstructed planning sketches.</p>
+                <div className="kv"><span>Progress</span><b>{Math.round(progress * 100)}%</b></div>
+                <div className="kv"><span>Phase</span><b>{readout?.phase || 'Launch'}</b></div>
+                <div className="kv"><span>ETA</span><b>{fmt(readout?.etaMin)} min</b></div>
+              </>
+            )}
+            {activeTab === 'entities' && (
+              <>
+                <h3>Entities · airframe &amp; site</h3>
+                <p>Live entities remain on the globe. This pane surfaces the protected site and airframe designation only.</p>
+                <div className="kv"><span>Site</span><b>{IMPACT_SITE.short || IMPACT_SITE.name || 'Al Warqa'}</b></div>
+                <div className="kv"><span>Airframe</span><b>{SHAHED_SPECS.designation}</b></div>
+                <div className="kv"><span>Corridor origin</span><b>{CORRIDOR_ORIGIN.lat.toFixed(4)}, {CORRIDOR_ORIGIN.lon.toFixed(4)}</b></div>
+              </>
+            )}
+            {activeTab === 'briefing' && (
+              <>
+                <h3>Briefing · defensive resilience</h3>
+                <p>UXE Security Solutions IMP-08 theatre. Early-warning, infrastructure dependency, recovery readiness. Southern Gulf side card removed — brief from globe + command chrome only. Open the net for live AVM narration.</p>
+                <div className="kv"><span>Scenario</span><b>{scenario.name}</b></div>
+                <div className="kv"><span>Classification</span><b>UNCLASSIFIED // DEFENSIVE</b></div>
+              </>
+            )}
+            {activeTab === 'sources' && (
+              <>
+                <h3>Sources · open / illustrative</h3>
+                <p>Imagery: ESRI World Imagery + World Terrain (key-free). Thermal: VIIRS FRP clusters. Specs cite open literature. KPI chips are planning sketches — not confirmed intelligence.</p>
+                <div className="kv"><span>Basemap</span><b>{imageryMode === 'dark' ? 'Carto Dark' : 'ESRI World Imagery'}</b></div>
+                <div className="kv"><span>Ion token</span><b className="ok-chip">NOT REQUIRED</b></div>
+                <div className="muted small src-line">Sources: {(SHAHED_SPECS.cite || []).join(', ') || 'open literature'}.</div>
+              </>
+            )}
+          </div>
+        </aside>
+      )}
 
-      {/* left: camera modes + waypoints */}
+      {/* left: camera modes + waypoints — Theatre tab only */}
+      {theatreActive && (
       <aside className="left-rail">
         <div className="panel">
           <div className="panel-h"><Video size={14} className="ph-ico" strokeWidth={1.75} /> Camera modes</div>
@@ -583,8 +708,10 @@ export default function App() {
           </div>
         </div>
       </aside>
+      )}
 
-      {/* right: impact + telemetry + geofence + thermal + intel + imagery + ion */}
+      {/* right: impact + telemetry + geofence + thermal + intel + imagery — Theatre only */}
+      {theatreActive && (
       <aside className="right-rail">
         <div className="panel">
           <div className="panel-h"><Crosshair size={14} className="ph-ico" strokeWidth={1.75} /> Protected site · Al Warqa</div>
@@ -685,6 +812,7 @@ export default function App() {
           <div className="muted small">Live, key-free satellite &amp; terrain streamed at the venue. Toggle a tactical dark basemap for low-light briefing. No Cesium ion / Google credentials.</div>
         </div>
       </aside>
+      )}
 
       {/* Live AVM reply playback element — src set dynamically; NOT the static MP3 */}
       <audio ref={audioRef} preload="none" />
@@ -703,8 +831,8 @@ export default function App() {
           title={`Live two-way AVM · workflow ${AVM_WORKFLOW_ID} · DeepSeek V4 Flash (mic in / spoken replies). Not TTS/STS/MP3 primary.`}
         >
           {netOpen
-            ? <><MicOff size={13} strokeWidth={1.75} /> {voicePhase === 'listening' ? 'Close · listening' : voicePhase === 'thinking' ? 'Close · thinking' : voicePhase === 'speaking' ? 'Close · speaking' : voicePhase === 'connecting' ? 'Close · connecting' : 'Close the net'}</>
-            : <><Mic size={13} strokeWidth={1.75} /> Open the net</>}
+            ? <><MicOff size={13} strokeWidth={1.75} /> {voicePhase === 'listening' ? 'CLOSE · LISTENING' : voicePhase === 'thinking' ? 'CLOSE · THINKING' : voicePhase === 'speaking' ? 'CLOSE · SPEAKING' : voicePhase === 'connecting' ? 'CLOSE · CONNECTING' : 'CLOSE THE NET'}</>
+            : <><Mic size={13} strokeWidth={1.75} /> OPEN THE NET</>}
         </button>
         <button className="play" onClick={togglePlay}>{playing ? <><Pause size={13} strokeWidth={1.75} /> Pause</> : <><Play size={13} strokeWidth={1.75} /> Run awareness</>}</button>
         <button className="reset-btn" type="button" onClick={onReset}><RotateCcw size={12} strokeWidth={1.75} /> Reset</button>
