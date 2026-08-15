@@ -636,6 +636,21 @@ body {
    CHAT TAB — OSINT research assistant (defensive/preventive only)
    Reuses the existing Foundry glass/border/token language; no new palette.
    ========================================================================== */
+
+/* Global :focus-visible for every interactive Chat-tab control. Prior to this
+   pass only `.chat-composer__input:focus` had ANY focus styling — every chip,
+   pill, and icon button relied on the browser default outline, which several
+   of them visually suppress via custom borders/backgrounds, leaving keyboard
+   users with NO visible focus indicator at all (WCAG 2.4.7). Scoped to
+   `.chat-tab-host` so it cannot affect any other tab's chrome. `:focus-visible`
+   (not `:focus`) so mouse/touch users see no change — only keyboard focus. */
+.chat-tab-host button:focus-visible,
+.chat-tab-host a:focus-visible,
+.chat-tab-host [tabindex]:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
 .chat-tab-host { display: flex; }
 .chat-pane {
   display: flex; flex-direction: column; gap: 6px;
@@ -666,9 +681,10 @@ body {
 }
 
 .chat-stream {
-  flex: 1; min-height: 0; overflow-y: auto;
+  flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain;
   display: flex; flex-direction: column; gap: 8px;
   padding: 4px 2px;
+  scrollbar-width: thin; scrollbar-color: var(--panel-bd-strong) transparent;
 }
 .chat-stream::-webkit-scrollbar { width: 3px; }
 .chat-stream::-webkit-scrollbar-thumb { background: var(--panel-bd-strong); }
@@ -708,6 +724,11 @@ body {
 .chat-bubble__text {
   font-family: var(--sans); font-size: 11.5px; line-height: 1.5;
   color: var(--ink); white-space: pre-wrap; word-break: break-word;
+  /* caps line length on wide/ultrawide desktops — .chat-empty p/.chat-starter
+     already do this (62ch/68ch); the answer body itself had no cap and could
+     stretch to unreadable line lengths at 1920px+ since .chat-bubble's
+     84%-of-parent max-width scales with the pane, not with text ergonomics. */
+  max-width: 72ch;
 }
 .chat-bubble__pending { display: inline-flex; align-items: center; gap: 6px; color: var(--ink-mute); }
 .chat-bubble__pending .spin, .chat-composer__send .spin { animation: chat-spin 0.9s linear infinite; }
@@ -1034,6 +1055,7 @@ body {
   text-decoration: none; transition: border-color .12s, background .12s;
 }
 .osint-source-card:hover { border-color: var(--panel-bd-strong); background: var(--bg-3); }
+.osint-source-card:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .osint-source-card.focus { border-color: var(--accent); background: var(--accent-soft); }
 .osint-source-card__num {
   flex: 0 0 auto; width: 16px; height: 16px; border-radius: 50%; display: grid; place-items: center;
@@ -1045,11 +1067,19 @@ body {
 .osint-source-card__title {
   font-family: var(--sans); font-size: 10.5px; font-weight: 600; color: var(--ink); line-height: 1.4;
   display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+  overflow-wrap: anywhere; word-break: break-word;
 }
-.osint-source-card__domain { font-family: var(--mono); font-size: 9px; color: var(--accent); margin-top: 2px; }
+.osint-source-card__domain {
+  font-family: var(--mono); font-size: 9px; color: var(--accent); margin-top: 2px;
+  overflow-wrap: anywhere; word-break: break-word;
+}
 .osint-source-card__snippet {
-  font-family: var(--sans); font-size: 9.5px; color: var(--ink-mute); line-height: 1.4; margin-top: 3px;
+  /* was --ink-mute (3.29:1 on --bg-2, fails WCAG AA for body text) — bumped
+     to --ink-dim (5.56:1, passes) since this is the primary scannable
+     content of every source card. */
+  font-family: var(--sans); font-size: 9.5px; color: var(--ink-dim); line-height: 1.4; margin-top: 3px;
   display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+  overflow-wrap: anywhere; word-break: break-word;
 }
 .osint-source-card__plugin {
   display: inline-block; margin-top: 4px; font-family: var(--sans); font-size: 8px; letter-spacing: .4px;
@@ -1059,12 +1089,17 @@ body {
 
 /* ---- numbered citation pill (inline in answer text) ---- */
 .osint-pill {
-  display: inline-grid; place-items: center; width: 15px; height: 15px; margin: 0 1px; vertical-align: super;
+  display: inline-grid; place-items: center; width: 15px; height: 15px; margin: 0 1px; vertical-align: text-top;
   font-family: var(--mono); font-size: 8.5px; font-weight: 700; line-height: 1;
-  color: var(--accent); background: var(--accent-soft); border: 1px solid var(--accent);
+  /* was --accent text on --accent-soft (~3.88:1, fails AA for this small
+     text) — filled with --accent and set the digit to --bg-0 instead, which
+     is the SAME visual weight as the existing :hover state (5.0+:1, passes)
+     and keeps the pill's "citation" affordance instantly recognizable. */
+  color: var(--bg-0); background: var(--accent); border: 1px solid var(--accent);
   border-radius: 50%; cursor: pointer; padding: 0; transition: all .12s;
 }
-.osint-pill:hover { background: var(--accent); color: var(--bg-0); }
+.osint-pill:hover { background: var(--accent2); border-color: var(--accent2); }
+.osint-pill:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 
 /* ---- horizontal citation chip row under the answer ---- */
 .osint-citerow { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 8px; }
@@ -1107,7 +1142,10 @@ body {
 
 /* ---- sectioned answer markdown (headings / bullets / rules / inline code) ---- */
 .osint-answer-h {
-  font-family: var(--sans); font-size: 11px; font-weight: 700; letter-spacing: .3px;
+  /* was 11px — smaller than the 11.5px body text it introduces, a genuine
+     hierarchy inversion; bumped so a heading reads larger than body, not
+     just bolder. */
+  font-family: var(--sans); font-size: 12.5px; font-weight: 700; letter-spacing: .3px;
   color: var(--ink); margin: 9px 0 4px;
 }
 .osint-answer-p:first-child, .osint-answer-h:first-child { margin-top: 0; }
@@ -1123,27 +1161,44 @@ body {
 }
 
 /* ---- image lightbox + Find Information overlay ---- */
+/* NOTE: now rendered via createPortal(document.body) from Lightbox.jsx — its
+   z-index:300 previously got trapped under the appbar/tabstrip/object-rail
+   (65-70) by `.chat-tab-host`'s own stacking context (zIndex:50 in App.jsx);
+   the portal escapes that trap without touching any existing z-index value. */
 .osint-lightbox { position: fixed; inset: 0; z-index: 300; display: flex; }
-.osint-lightbox__scrim { position: absolute; inset: 0; background: rgba(6, 7, 9, 0.82); backdrop-filter: blur(2px); }
+.osint-lightbox__scrim {
+  position: absolute; inset: 0; background: rgba(6, 7, 9, 0.82);
+  -webkit-backdrop-filter: blur(2px); backdrop-filter: blur(2px);
+  overscroll-behavior: contain;
+}
 .osint-lightbox__layout {
-  position: relative; margin: auto; width: min(96vw, 1080px); height: min(88vh, 700px);
+  position: relative; margin: auto; width: min(96vw, 1080px);
+  height: min(88svh, 700px); height: min(88dvh, 700px);
   display: flex; gap: 10px; padding: 20px;
+  padding-top: calc(20px + env(safe-area-inset-top, 0px));
+  padding-bottom: calc(20px + env(safe-area-inset-bottom, 0px));
 }
 .osint-lightbox__stage {
   position: relative; flex: 1; min-width: 0; display: flex; align-items: center; justify-content: center;
   background: var(--bg-1); border: 1px solid var(--panel-bd-strong); border-radius: var(--radius); overflow: hidden;
 }
 .osint-lightbox__figure { margin: 0; max-width: 100%; max-height: 100%; display: flex; flex-direction: column; align-items: center; }
-.osint-lightbox__figure img { max-width: 100%; max-height: calc(min(88vh, 700px) - 60px); object-fit: contain; display: block; }
+.osint-lightbox__figure img {
+  max-width: 100%; max-height: calc(min(88svh, 700px) - 60px); max-height: calc(min(88dvh, 700px) - 60px);
+  object-fit: contain; display: block;
+}
 .osint-lightbox__figure figcaption {
   margin-top: 8px; font-family: var(--mono); font-size: 9px; color: var(--ink-mute); text-align: center;
 }
 .osint-lightbox__close, .osint-lightbox__nav {
   position: absolute; display: grid; place-items: center; background: rgba(16,19,23,0.85);
   border: 1px solid var(--panel-bd-strong); color: var(--ink); border-radius: 50%; cursor: pointer;
-  width: 30px; height: 30px; transition: all .12s; z-index: 2;
+  width: 40px; height: 40px; transition: all .12s; z-index: 2;
 }
 .osint-lightbox__close:hover, .osint-lightbox__nav:hover { border-color: var(--accent); color: var(--accent); }
+.osint-lightbox__close:focus-visible, .osint-lightbox__nav:focus-visible {
+  outline: 2px solid var(--accent); outline-offset: 2px;
+}
 .osint-lightbox__close { top: 10px; right: 10px; }
 .osint-lightbox__nav.prev { left: 10px; top: 50%; transform: translateY(-50%); }
 .osint-lightbox__nav.next { right: 10px; top: 50%; transform: translateY(-50%); }
@@ -1174,36 +1229,93 @@ body {
   padding: 7px 10px; text-decoration: none; transition: all .12s;
 }
 .osint-findinfo__open:hover { background: var(--accent); color: var(--bg-0); }
+.osint-findinfo__open:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 
 /* ---- sources drawer (right-side panel) ---- */
-.osint-drawer-host { position: fixed; inset: 0; z-index: 290; display: flex; justify-content: flex-end; }
+/* NOTE: now rendered via createPortal(document.body) from SourcesDrawer.jsx
+   — see the .osint-lightbox comment above for the stacking-context rationale.
+   This is the fix for the screenshotted mobile bug: the drawer's own header
+   and the top of its first card were painting BEHIND the opaque appbar/
+   tabstrip chrome (which sit at z-index 65-70, above the `.chat-tab-host`
+   ancestor's z-index:50 stacking context this drawer used to be trapped
+   inside), producing the "headline clipped at the very top edge" screenshot. */
+.osint-drawer-host {
+  position: fixed; inset: 0; z-index: 290; display: flex; justify-content: flex-end;
+  overscroll-behavior: contain;
+}
 .osint-drawer-host__scrim { position: absolute; inset: 0; background: rgba(6, 7, 9, 0.55); }
 .osint-drawer {
-  position: relative; width: min(92vw, 380px); height: 100%;
+  position: relative; width: min(92vw, 380px);
+  height: 100svh; height: 100dvh;
   background: var(--panel-bg-2); border-left: 1px solid var(--panel-bd-strong);
   display: flex; flex-direction: column;
   animation: osint-drawer-in .16s ease-out;
+  padding-top: env(safe-area-inset-top, 0px);
+  padding-bottom: env(safe-area-inset-bottom, 0px);
 }
 @keyframes osint-drawer-in { from { transform: translateX(16px); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
 .osint-drawer__head {
   display: flex; align-items: center; justify-content: space-between;
-  padding: 12px 14px; border-bottom: 1px solid var(--panel-bd);
+  flex: 0 0 auto;
+  padding: 12px 10px 12px 14px; border-bottom: 1px solid var(--panel-bd);
   font-family: var(--sans); font-size: 10.5px; font-weight: 700; letter-spacing: .8px; text-transform: uppercase;
   color: var(--ink);
 }
 .osint-drawer__head span { display: inline-flex; align-items: center; gap: 6px; }
 .osint-drawer__head button {
-  background: transparent; border: none; color: var(--ink-mute); cursor: pointer; display: grid; place-items: center;
+  background: transparent; border: none; color: var(--ink-mute); cursor: pointer;
+  display: grid; place-items: center;
+  width: 40px; height: 40px; min-width: 40px; border-radius: var(--radius);
 }
-.osint-drawer__head button:hover { color: var(--ink); }
-.osint-drawer__body { flex: 1; overflow-y: auto; padding: 10px; display: flex; flex-direction: column; gap: 7px; }
+.osint-drawer__head button:hover { color: var(--ink); background: var(--bg-2); }
+.osint-drawer__head button:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.osint-drawer__body {
+  flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain;
+  padding: 10px; padding-bottom: calc(10px + env(safe-area-inset-bottom, 0px));
+  display: flex; flex-direction: column; gap: 7px;
+}
+
+@media (min-width: 1280px) {
+  /* Desktop: the flat 380px clamp (tuned for mobile) reads narrow on a wide
+     canvas once a card's favicon + title + domain + 2-line snippet + plugin
+     chip share one row — widen proportionally, capped well short of the
+     lightbox's own 1080px cap so the two overlays stay visually distinct. */
+  .osint-drawer { width: min(26vw, 440px); }
+}
 
 @media (max-width: 900px) {
-  .osint-lightbox__layout { flex-direction: column; width: 96vw; height: 92vh; padding: 10px; }
-  .osint-findinfo { flex: 0 0 auto; max-height: 40%; }
+  .osint-lightbox__layout {
+    flex-direction: column; width: 96vw;
+    height: 92svh; height: 92dvh;
+    padding: 10px;
+    padding-top: calc(10px + env(safe-area-inset-top, 0px));
+    padding-bottom: calc(10px + env(safe-area-inset-bottom, 0px));
+  }
+  .osint-lightbox__figure img { max-height: 50vh; max-height: 50svh; max-height: 50dvh; }
+  .osint-findinfo { flex: 1 1 auto; min-height: 0; max-height: none; }
   .osint-drawer { width: 100vw; }
+  /* Source-card text is comfortable at desktop sizes (9-10.5px) but tight on
+     a 375-414px phone; nudge up slightly for mobile legibility only. Placed
+     in THIS (later) breakpoint block, not the earlier one at line ~929,
+     because source order matters at equal specificity — an override placed
+     before the base `.osint-source-card__title` rule would be silently
+     beaten by it regardless of media-query match. */
+  .osint-source-card__title { font-size: 11px; }
+  .osint-source-card__snippet { font-size: 10px; }
+  .osint-source-card__domain { font-size: 9.5px; }
+}
+@media (max-height: 500px) and (orientation: landscape) {
+  /* Short landscape phones (e.g. 812x375) exceed the 900px WIDTH breakpoint
+     above and would otherwise fall through to desktop-oriented sizing on a
+     viewport that is just as constrained as portrait mobile. */
+  .osint-lightbox__layout { height: 92svh; height: 92dvh; padding: 8px; }
+  .osint-findinfo { flex: 0 0 180px; }
+  .osint-drawer { width: min(70vw, 380px); }
 }
 @media (prefers-reduced-motion: reduce) {
-  .chat-bubble__cursor, .chat-plugin-chip .spin { animation: none; }
+  .chat-bubble__cursor, .chat-plugin-chip .spin,
+  .chat-bubble__pending .spin, .chat-composer__send .spin {
+    animation: none;
+  }
   .osint-drawer { animation: none; }
 }

@@ -7,16 +7,69 @@
  * and citation pills remain visible per the task brief. Defensive-OSINT
  * only — the PLACE section renders a location readout, never a targeting
  * reticle or coordinate lock-on graphic.
+ *
+ * UX-polish pass (2026-08-15, 5-subagent audit):
+ *   - Rendered via createPortal(document.body) so this fixed-position overlay
+ *     escapes the `.chat-tab-host` local stacking context (that host has an
+ *     explicit `zIndex:50` in App.jsx, shared with `.left-rail`/`.right-rail`
+ *     — intentionally BELOW the appbar/tabstrip/object-rail chrome at 65-70,
+ *     which is correct for normal chat content but was silently capping this
+ *     modal's own z-index:300 underneath that chrome too, since a CSS
+ *     stacking context traps ALL descendants regardless of their own
+ *     z-index). Portaling to <body> is the standard, lowest-risk fix — it
+ *     does not touch any existing z-index value, so the Theatre/rail/tabstrip
+ *     layering is completely unaffected.
+ *   - Focus now moves into the dialog on open (close button) and is RESTORED
+ *     to the element that opened it on close, per the WAI-ARIA dialog
+ *     pattern. A lightweight Tab/Shift+Tab focus trap keeps keyboard focus
+ *     inside the lightbox while it is open.
  */
-import React, { useEffect } from 'react';
+import React, { useEffect, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { X, ChevronLeft, ChevronRight, MapPin, Info, ExternalLink, Radio } from 'lucide-react';
 
+function getFocusable(container) {
+  if (!container) return [];
+  return Array.from(
+    container.querySelectorAll('button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'),
+  ).filter((el) => !el.disabled && el.offsetParent !== null);
+}
+
 export default function ImageLightbox({ urls, index, findInfo, onClose, onNav }) {
+  const dialogRef = useRef(null);
+  const closeBtnRef = useRef(null);
+  const previouslyFocusedRef = useRef(null);
+
+  // Focus management: remember the trigger element, move focus into the
+  // dialog on mount, restore focus to the trigger on unmount.
+  useEffect(() => {
+    previouslyFocusedRef.current = document.activeElement;
+    closeBtnRef.current?.focus();
+    return () => {
+      if (previouslyFocusedRef.current && typeof previouslyFocusedRef.current.focus === 'function') {
+        previouslyFocusedRef.current.focus();
+      }
+    };
+  }, []);
+
   useEffect(() => {
     const onKey = (e) => {
-      if (e.key === 'Escape') onClose();
-      else if (e.key === 'ArrowLeft') onNav(-1);
-      else if (e.key === 'ArrowRight') onNav(1);
+      if (e.key === 'Escape') { onClose(); return; }
+      if (e.key === 'ArrowLeft') { onNav(-1); return; }
+      if (e.key === 'ArrowRight') { onNav(1); return; }
+      if (e.key === 'Tab' && dialogRef.current) {
+        const focusable = getFocusable(dialogRef.current);
+        if (!focusable.length) return;
+        const first = focusable[0];
+        const last = focusable[focusable.length - 1];
+        if (e.shiftKey && document.activeElement === first) {
+          e.preventDefault();
+          last.focus();
+        } else if (!e.shiftKey && document.activeElement === last) {
+          e.preventDefault();
+          first.focus();
+        }
+      }
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
@@ -26,12 +79,12 @@ export default function ImageLightbox({ urls, index, findInfo, onClose, onNav })
   const url = urls[Math.max(0, Math.min(index, urls.length - 1))];
   const hasMultiple = urls.length > 1;
 
-  return (
-    <div className="osint-lightbox" role="dialog" aria-modal="true" aria-label="Image viewer">
+  return createPortal(
+    <div className="osint-lightbox" role="dialog" aria-modal="true" aria-label="Image viewer" ref={dialogRef}>
       <div className="osint-lightbox__scrim" onClick={onClose} />
       <div className="osint-lightbox__layout">
         <div className="osint-lightbox__stage">
-          <button type="button" className="osint-lightbox__close" onClick={onClose} aria-label="Close">
+          <button type="button" className="osint-lightbox__close" onClick={onClose} aria-label="Close" ref={closeBtnRef}>
             <X size={16} strokeWidth={2} />
           </button>
           {hasMultiple && (
@@ -96,6 +149,7 @@ export default function ImageLightbox({ urls, index, findInfo, onClose, onNav })
           </a>
         </aside>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }

@@ -360,7 +360,11 @@ function ChatBubble({ msg, isLast, busy, onOpenLightbox, onOpenDrawer, onFollowU
       {!isUser && <PluginStatusChips activeNames={activeNames} doneNames={doneNames} />}
       {!isUser && !msg.pending && !msg.error && <SmartCards cards={smartCards} onOpenLightbox={handleOpenLightbox} />}
 
-      <div className="chat-bubble__text">
+      <div
+        className="chat-bubble__text"
+        role={isUser ? undefined : 'status'}
+        aria-live={isUser ? undefined : 'polite'}
+      >
         {msg.pending && !msg.text?.trim() && !msg.thinking?.trim() && !activeNames.length && !doneNames.length ? (
           <span className="chat-bubble__pending"><Loader2 size={13} className="spin" /> Researching…</span>
         ) : msg.error ? (
@@ -724,6 +728,7 @@ export default function ChatPanel() {
           onClick={() => fileInputRef.current?.click()}
           disabled={busy}
           title="Attach image"
+          aria-label="Attach image"
         >
           <Paperclip size={14} strokeWidth={1.9} />
         </button>
@@ -742,6 +747,7 @@ export default function ChatPanel() {
           onClick={() => send()}
           disabled={busy || (!text.trim() && !attachments.length)}
           title="Send"
+          aria-label="Send"
         >
           {busy ? <Loader2 size={15} className="spin" /> : <Send size={15} strokeWidth={1.9} />}
         </button>
