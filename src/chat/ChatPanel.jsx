@@ -11,9 +11,9 @@
  *
  * Wired to the LIVE OnDemand public Chat & Agent Tools API via /api/chat/*
  * (dev: server/chatLiveProxy.js Vite middleware; prod: api/chat/[action].js
- * Vercel function). Model: Grok 4.6 (predefined-xai-grok4.6). Tool catalog:
- * src/chat/osintPlugins.js (existing OnDemand plugins only — no new
- * plugin/tool created here).
+ * Vercel function). Model: Gemini 3.7 Flash (predefined-gemini-3.7-flash).
+ * Tool catalog: src/chat/osintPlugins.js (existing OnDemand plugins only —
+ * no new plugin/tool created here).
  *
  * STREAMING UX — patterned after navnit28/ondemand-hq's Chat client
  * (src/ondemandDirect.js + src/components/playground/ThinkingProcess.jsx +
@@ -472,7 +472,7 @@ export default function ChatPanel() {
 
   const keyMissing = health && health.hasApiKey === false;
   const isEmpty = messages.length === 0;
-  const modelLabel = health?.modelLabel || 'Grok 4.6';
+  const modelLabel = health?.modelLabel || 'Gemini 3.7 Flash';
 
   return (
     <div className="chat-pane">

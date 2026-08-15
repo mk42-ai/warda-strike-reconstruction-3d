@@ -1,8 +1,8 @@
 /**
  * Production serverless Chat / OSINT API. Mirrors server/chatLiveProxy.js for
  * Vercel (static Vite build has no Vite dev middleware) — same routes, same
- * upstream calls, same Grok 4.6 model, same OSINT-only plugin catalog, same
- * SSE streaming pass-through.
+ * upstream calls, same Gemini 3.7 Flash model, same OSINT-only plugin catalog,
+ * same SSE streaming pass-through.
  *
  * OnDemand public Chat & Agent Tools API (live-docs-verified 2026-08-15):
  *   POST /chat/v1/sessions                       createChatSession
@@ -12,7 +12,9 @@
  * Header: apikey: <ON_DEMAND_API_KEY> (server-side only). Host: https://api.on-demand.io.
  *
  * MODEL (live-verified 2026-08-15, GET /config/v1/public/endpoints):
- *   endpoint_id predefined-xai-grok4.6 · model_id grok-4.6 · status active
+ *   endpoint_id predefined-gemini-3.7-flash · model_id gemini-3.7-flash · status active
+ *   (Google's 2026-08-13 Flash-tier coding/agents workhorse; superseded the
+ *   prior Grok 4.6 wiring on this turn.)
  *   reasoning_efforts: ["low","medium","max"] — the three official reasoning
  *   modes for this endpoint, sent as top-level `reasoningEffort`. NOTE: this
  *   field is a live-accepted extension NOT present in the published
@@ -32,9 +34,9 @@ import { OSINT_ALL_PLUGIN_IDS } from '../../src/chat/osintPlugins.js';
 
 export const config = { api: { bodyParser: true } };
 
-const CHAT_ENDPOINT_ID = 'predefined-xai-grok4.6';
-const CHAT_MODEL_ID = 'grok-4.6';
-const CHAT_MODEL_LABEL = 'Grok 4.6';
+const CHAT_ENDPOINT_ID = 'predefined-gemini-3.7-flash';
+const CHAT_MODEL_ID = 'gemini-3.7-flash';
+const CHAT_MODEL_LABEL = 'Gemini 3.7 Flash';
 const REASONING_EFFORTS = ['low', 'medium', 'max'];
 const DEFAULT_REASONING_EFFORT = 'medium';
 const validEffort = (e) => (REASONING_EFFORTS.includes(e) ? e : DEFAULT_REASONING_EFFORT);

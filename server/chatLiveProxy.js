@@ -15,8 +15,11 @@
  * never sent to or read by the browser). Base host: https://api.on-demand.io.
  *
  * MODEL (live-verified 2026-08-15 against GET /config/v1/public/endpoints):
- *   endpoint_id  predefined-xai-grok4.6
- *   endpoint_name ondemand-grok-4.6 · model_id grok-4.6 · status active
+ *   endpoint_id  predefined-gemini-3.7-flash
+ *   endpoint_name gemini-3.7-flash · model_id gemini-3.7-flash · status active
+ *   (Google announced Gemini 3.7 Flash 2026-08-13 as its Flash-tier
+ *   coding/agents workhorse; this is the corresponding live OnDemand
+ *   predefined endpoint — superseded the prior Grok 4.6 wiring on this turn.)
  *   reasoning_efforts: ["low","medium","max"]   <- the THREE official reasoning
  *   modes for this endpoint (same 3-value set repeated on every reasoning-
  *   capable endpoint in the live registry — Sonnet 5, Fable 5, Kimi K3, GLM
@@ -56,11 +59,11 @@ import { URL } from 'node:url';
 import { OSINT_ALL_PLUGIN_IDS } from '../src/chat/osintPlugins.js';
 
 // Live-verified 2026-08-15: GET /config/v1/public/endpoints -> {endpoint_id:
-// "predefined-xai-grok4.6", endpoint_name: "ondemand-grok-4.6", model_id:
-// "grok-4.6", status: "active", reasoning_efforts: ["low","medium","max"]}.
-export const CHAT_ENDPOINT_ID = 'predefined-xai-grok4.6';
-export const CHAT_MODEL_ID = 'grok-4.6';
-export const CHAT_MODEL_LABEL = 'Grok 4.6';
+// "predefined-gemini-3.7-flash", endpoint_name: "gemini-3.7-flash", model_id:
+// "gemini-3.7-flash", status: "active", reasoning_efforts: ["low","medium","max"]}.
+export const CHAT_ENDPOINT_ID = 'predefined-gemini-3.7-flash';
+export const CHAT_MODEL_ID = 'gemini-3.7-flash';
+export const CHAT_MODEL_LABEL = 'Gemini 3.7 Flash';
 
 // The three official reasoning modes for this endpoint (live-verified — see
 // header comment). Exposed so the UI and the API share one source of truth.
