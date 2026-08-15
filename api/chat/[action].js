@@ -1,20 +1,27 @@
 /**
  * Production serverless Chat / OSINT API. Mirrors server/chatLiveProxy.js for
  * Vercel (static Vite build has no Vite dev middleware) — same routes, same
- * upstream calls, same DeepSeek V4 Pro model, same OSINT-only plugin catalog.
+ * upstream calls, same Grok 4.6 model, same OSINT-only plugin catalog, same
+ * SSE streaming pass-through.
  *
  * OnDemand public Chat & Agent Tools API (live-docs-verified 2026-08-15):
- *   POST /chat/v1/sessions                     createChatSession
- *   POST /chat/v1/sessions/{sessionId}/query   submitQuery (agent-tool attachment via pluginIds)
- *   GET  /chat/v1/sessions                     getChatSessions
- *   GET  /chat/v1/sessions/{sessionId}/messages getChatMessages
+ *   POST /chat/v1/sessions                       createChatSession
+ *   POST /chat/v1/sessions/{sessionId}/query     submitQuery (agentIds tool attachment)
+ *   GET  /chat/v1/sessions                       getChatSessions
+ *   GET  /chat/v1/sessions/{sessionId}/messages  getChatMessages
  * Header: apikey: <ON_DEMAND_API_KEY> (server-side only). Host: https://api.on-demand.io.
  *
- * Model: predefined-deepseek-v4-pro (model_id deepseek-v4-pro, status active —
- * GET /config/v1/public/endpoints, verified 2026-08-15).
+ * MODEL (live-verified 2026-08-15, GET /config/v1/public/endpoints):
+ *   endpoint_id predefined-xai-grok4.6 · model_id grok-4.6 · status active
+ *   reasoning_efforts: ["low","medium","max"] — the three official reasoning
+ *   modes for this endpoint, sent as top-level `reasoningEffort`. NOTE: this
+ *   field is a live-accepted extension NOT present in the published
+ *   submitquery OpenAPI schema (query/endpointId/responseMode/pluginIds/
+ *   fulfillmentOnly/modelConfigs only) — flagged, not invented.
  *
- * Tools: pluginIds[] from src/chat/osintPlugins.js — existing OnDemand plugins
- * only, no new plugin/tool is created by this file.
+ * Tools: agentIds[] translated at the wire boundary from
+ * src/chat/osintPlugins.js's plugin-XXXX catalog — existing OnDemand plugins
+ * only, no new plugin/tool created by this file.
  *
  * Scope: defensive/preventive OSINT research only — see OSINT_SYSTEM_PROMPT.
  */
@@ -25,8 +32,12 @@ import { OSINT_ALL_PLUGIN_IDS } from '../../src/chat/osintPlugins.js';
 
 export const config = { api: { bodyParser: true } };
 
-const CHAT_ENDPOINT_ID = 'predefined-deepseek-v4-pro';
-const CHAT_MODEL_ID = 'deepseek-v4-pro';
+const CHAT_ENDPOINT_ID = 'predefined-xai-grok4.6';
+const CHAT_MODEL_ID = 'grok-4.6';
+const CHAT_MODEL_LABEL = 'Grok 4.6';
+const REASONING_EFFORTS = ['low', 'medium', 'max'];
+const DEFAULT_REASONING_EFFORT = 'medium';
+const validEffort = (e) => (REASONING_EFFORTS.includes(e) ? e : DEFAULT_REASONING_EFFORT);
 
 const OSINT_SYSTEM_PROMPT =
   'You are the UXE Security Solutions OSINT Research Assistant embedded in the ' +
@@ -96,6 +107,66 @@ function odFetch(method, path, body) {
   });
 }
 
+/**
+ * Raw streaming fetch — pipes the upstream SSE body straight to the Vercel
+ * response object as bytes arrive. No buffering, no re-framing.
+ */
+function odFetchStream(path, body, res) {
+  const key = apiKey();
+  if (!key) return Promise.reject(new Error('ON_DEMAND_API_KEY missing on server'));
+  const url = new URL(path.startsWith('http') ? path : `${API_HOST}${path}`);
+  const payload = JSON.stringify(body);
+  const lib = url.protocol === 'http:' ? http : https;
+  return new Promise((resolve, reject) => {
+    const req = lib.request(
+      {
+        protocol: url.protocol,
+        hostname: url.hostname,
+        port: url.port || (url.protocol === 'http:' ? 80 : 443),
+        path: url.pathname + url.search,
+        method: 'POST',
+        headers: {
+          apikey: key,
+          'Content-Type': 'application/json',
+          Accept: 'text/event-stream',
+          'Content-Length': Buffer.byteLength(payload),
+        },
+        timeout: 0,
+      },
+      (upstream) => {
+        if ((upstream.statusCode || 0) >= 400) {
+          const chunks = [];
+          upstream.on('data', (c) => chunks.push(c));
+          upstream.on('end', () => {
+            const text = Buffer.concat(chunks).toString('utf8');
+            let json = null;
+            try { json = JSON.parse(text); } catch { /* not JSON */ }
+            const err = new Error(`stream_http_${upstream.statusCode}`);
+            err.status = upstream.statusCode;
+            err.detail = json || text;
+            reject(err);
+          });
+          return;
+        }
+        res.writeHead(200, {
+          'Content-Type': 'text/event-stream; charset=utf-8',
+          'Cache-Control': 'no-cache, no-transform',
+          Connection: 'keep-alive',
+          'Access-Control-Allow-Origin': '*',
+          'X-Accel-Buffering': 'no',
+        });
+        upstream.on('data', (chunk) => res.write(chunk));
+        upstream.on('end', () => { res.end(); resolve(); });
+        upstream.on('error', (e) => { try { res.end(); } catch { /* already closed */ } reject(e); });
+      },
+    );
+    req.on('error', reject);
+    req.on('timeout', () => req.destroy(new Error('upstream_timeout')));
+    req.write(payload);
+    req.end();
+  });
+}
+
 // agent-XXXX -> plugin-XXXX (the shape a live 400 reports unsubscribed/invalid ids in).
 const toPluginId = (id) => (typeof id === 'string' && id.startsWith('agent-') ? id.replace(/^agent-/, 'plugin-') : id);
 
@@ -144,10 +215,8 @@ async function createOsintSession(pluginIds) {
   throw new Error('session_create_exhausted');
 }
 
-// Same bounded strip-and-retry resilience as createOsintSession — a plugin can be
-// valid at session-create time yet still reported invalid at query time (observed
-// live), so this independently tolerates the same 400 shape. Uses agentIds (see note above).
-async function submitOsintQuery(sessionId, userText, pluginIds) {
+// Non-streaming query — kept for compatibility.
+async function submitOsintQuery(sessionId, userText, pluginIds, reasoningEffort) {
   const query = String(userText || '').trim().slice(0, 4000);
   if (!query) throw new Error('empty_query');
   let ids = Array.isArray(pluginIds) && pluginIds.length ? [...pluginIds] : [...OSINT_ALL_PLUGIN_IDS];
@@ -156,6 +225,7 @@ async function submitOsintQuery(sessionId, userText, pluginIds) {
       query,
       endpointId: CHAT_ENDPOINT_ID,
       responseMode: 'sync',
+      reasoningEffort: validEffort(reasoningEffort),
       agentIds: toAgentIds(ids),
       modelConfigs: { fulfillmentPrompt: OSINT_SYSTEM_PROMPT, temperature: 0.4 },
     };
@@ -184,6 +254,40 @@ async function submitOsintQuery(sessionId, userText, pluginIds) {
     throw err;
   }
   throw new Error('query_exhausted');
+}
+
+// STREAMING query — pipes raw upstream SSE to the Vercel response. Same bounded
+// strip-and-retry resilience, restricted to before any bytes have streamed out.
+async function submitOsintQueryStream(sessionId, userText, pluginIds, reasoningEffort, res) {
+  const query = String(userText || '').trim().slice(0, 4000);
+  if (!query) throw new Error('empty_query');
+  let ids = Array.isArray(pluginIds) && pluginIds.length ? [...pluginIds] : [...OSINT_ALL_PLUGIN_IDS];
+  for (let attempt = 0; attempt < 2; attempt++) {
+    const body = {
+      query,
+      endpointId: CHAT_ENDPOINT_ID,
+      responseMode: 'stream',
+      reasoningEffort: validEffort(reasoningEffort),
+      agentIds: toAgentIds(ids),
+      modelConfigs: { fulfillmentPrompt: OSINT_SYSTEM_PROMPT, temperature: 0.4 },
+    };
+    try {
+      await odFetchStream(`/chat/v1/sessions/${encodeURIComponent(sessionId)}/query`, body, res);
+      return;
+    } catch (err) {
+      const badAgentIds = err.detail?.details?.invalidAgentIds || err.detail?.details?.unsubscribedAgentIds;
+      if (attempt === 0 && !res.headersSent && Array.isArray(badAgentIds) && badAgentIds.length) {
+        const bad = new Set(badAgentIds.map(toPluginId));
+        const next = ids.filter((id) => !bad.has(id));
+        if (next.length < ids.length) {
+          ids = next;
+          continue;
+        }
+      }
+      throw err;
+    }
+  }
+  throw new Error('query_stream_exhausted');
 }
 
 async function listOsintSessions({ limit = 10, cursor, sort = 'desc' } = {}) {
@@ -231,16 +335,23 @@ export default async function handler(req, res) {
       return;
     }
 
+    // req.query.action is the FIRST dynamic segment only (Vercel [action].js),
+    // so the streaming route is distinguished by an explicit ?stream=1 flag
+    // rather than a second path segment (which [action].js cannot capture).
     const action = String(req.query?.action || '')
       .replace(/^\//, '')
       .split('?')[0]
       .toLowerCase();
+    const isStream = req.query?.stream === '1' || req.query?.stream === 'true';
 
     if (req.method === 'GET' && action === 'health') {
       return send(res, 200, {
         ok: true,
         endpointId: CHAT_ENDPOINT_ID,
         model: CHAT_MODEL_ID,
+        modelLabel: CHAT_MODEL_LABEL,
+        reasoningEfforts: REASONING_EFFORTS,
+        defaultReasoningEffort: DEFAULT_REASONING_EFFORT,
         pluginCount: OSINT_ALL_PLUGIN_IDS.length,
         hasApiKey: Boolean(apiKey()),
         runtime: 'vercel-serverless',
@@ -250,13 +361,35 @@ export default async function handler(req, res) {
     if (req.method === 'POST' && action === 'session') {
       const body = typeof req.body === 'string' ? JSON.parse(req.body || '{}') : req.body || {};
       const { sessionId, pluginIds } = await createOsintSession(body.pluginIds);
-      return send(res, 200, { ok: true, sessionId, pluginIds, endpointId: CHAT_ENDPOINT_ID, model: CHAT_MODEL_ID });
+      return send(res, 200, {
+        ok: true, sessionId, pluginIds,
+        endpointId: CHAT_ENDPOINT_ID, model: CHAT_MODEL_ID, modelLabel: CHAT_MODEL_LABEL,
+      });
+    }
+
+    if (req.method === 'POST' && action === 'query' && isStream) {
+      const body = typeof req.body === 'string' ? JSON.parse(req.body || '{}') : req.body || {};
+      if (!body.sessionId) return send(res, 400, { ok: false, error: 'sessionId_required' });
+      try {
+        await submitOsintQueryStream(body.sessionId, body.text || body.query, body.pluginIds, body.reasoningEffort, res);
+      } catch (err) {
+        if (!res.headersSent) {
+          return send(res, err.status && err.status < 500 ? err.status : 500, {
+            ok: false, error: String(err?.message || err), detail: err?.detail || null,
+          });
+        }
+        try {
+          res.write(`data: ${JSON.stringify({ type: 'error', message: String(err?.message || err) })}\n\n`);
+          res.end();
+        } catch { /* connection already gone */ }
+      }
+      return;
     }
 
     if (req.method === 'POST' && action === 'query') {
       const body = typeof req.body === 'string' ? JSON.parse(req.body || '{}') : req.body || {};
       if (!body.sessionId) return send(res, 400, { ok: false, error: 'sessionId_required' });
-      const turn = await submitOsintQuery(body.sessionId, body.text || body.query, body.pluginIds);
+      const turn = await submitOsintQuery(body.sessionId, body.text || body.query, body.pluginIds, body.reasoningEffort);
       return send(res, 200, { ok: true, sessionId: body.sessionId, ...turn });
     }
 
@@ -283,10 +416,13 @@ export default async function handler(req, res) {
     return send(res, 404, { ok: false, error: 'unknown_chat_route', action });
   } catch (err) {
     console.error('[api/chat]', err?.message || err, err?.detail || '');
-    return send(res, 500, {
-      ok: false,
-      error: String(err?.message || err),
-      detail: err?.detail || null,
-    });
+    if (!res.headersSent) {
+      return send(res, 500, {
+        ok: false,
+        error: String(err?.message || err),
+        detail: err?.detail || null,
+      });
+    }
+    try { res.end(); } catch { /* already closed */ }
   }
 }
