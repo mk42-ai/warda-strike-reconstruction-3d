@@ -1,8 +1,8 @@
 /**
- * ChatPanel.jsx — Chat tab: an OSINT (open-source intelligence) research
- * assistant panel that fits the existing Palantir/Foundry chrome (same
- * `.panel` / `.panel-h` / `.kv` / `.wide-btn` classes as the Theatre tab's
- * left/right rails — see src/styles.css).
+ * ChatPanel.jsx — Chat tab: a rich, Perplexity-style OSINT (open-source
+ * intelligence) research assistant panel that fits the existing
+ * Palantir/Foundry chrome (same `.panel` / `.panel-h` / `.kv` / `.wide-btn`
+ * classes as the Theatre tab's left/right rails — see src/styles.css).
  *
  * DEFENSIVE / PREVENTIVE OSINT RESEARCH ONLY. No attack planning, targeting,
  * sabotage, malware, or intrusion techniques — enforced both by the
@@ -11,37 +11,81 @@
  *
  * Wired to the LIVE OnDemand public Chat & Agent Tools API via /api/chat/*
  * (dev: server/chatLiveProxy.js Vite middleware; prod: api/chat/[action].js
- * Vercel function). Model: Gemini 3.7 Flash (predefined-gemini-3.7-flash).
- * Tool catalog: src/chat/osintPlugins.js (existing OnDemand plugins only —
- * no new plugin/tool created here).
+ * Vercel function). Model: Gemini 3.7 Flash (predefined-gemini-3.7-flash) —
+ * UNTOUCHED on this turn; every session/query/reasoning/streaming call below
+ * is byte-identical to the prior turn's wiring. Tool catalog:
+ * src/chat/osintPlugins.js (existing OnDemand plugins only — no new
+ * plugin/tool created here).
  *
  * STREAMING UX — patterned after navnit28/ondemand-hq's Chat client
  * (src/ondemandDirect.js + src/components/playground/ThinkingProcess.jsx +
- * StatusLogBlock.jsx), NOT a pixel-clone of that repo's chrome:
+ * StatusLogBlock.jsx + parseAgentic.js), NOT a pixel-clone of that repo's
+ * chrome:
  *   - submitQuery is called with responseMode:'stream'; the raw upstream SSE
  *     body is read incrementally via fetch()+ReadableStream (no EventSource,
  *     which can't POST or set the `apikey` header).
  *   - Five independent live channels per turn, matching the raw upstream
  *     eventTypes: `thinking` (planning_thinking/step_thinking .thinking.delta),
  *     `planningAnswer`/`pluginAnswer` (planning_output/step_output
- *     .output.delta — parsed for plugin-call names to drive the status
- *     chips), and `text` (fulfillment .answer — the final rendered answer).
+ *     .output.delta — parsed for plugin-call names+params to drive the status
+ *     chips AND the smart-renderer cards below), and `text` (fulfillment
+ *     .answer — the final rendered answer).
  *   - A "Thinking" panel toggle shows/hides the live reasoning stream; it
  *     auto-collapses the instant the final answer starts (same UX rule as
  *     ondemand-hq's ThinkingProcess.jsx) but stays user-reopenable.
  *   - A reasoning-mode selector (Low / Medium / Max) sends the OnDemand
  *     `reasoningEffort` field with the query.
- *   - Any http(s) image URL detected in the streamed answer (a bare URL or a
- *     markdown ![alt](url)) renders inline as a thumbnail AND keeps a
- *     separate Download link — this is IN ADDITION TO plain markdown <img>
- *     rendering (already permitted by dissect()/Markdown below).
+ *
+ * RICH ANSWER CHROME (this turn's addition — src/chat/streamParsing.js,
+ * renderers.jsx, markdownLite.jsx, Lightbox.jsx, SourcesDrawer.jsx):
+ *   - LIVE-VERIFIED WIRE FACT (three smoke tests run against this exact
+ *     deployment on 2026-08-15 before writing any of this): the OnDemand SSE
+ *     stream never exposes structured tool-RESULT JSON — only tool-CALL
+ *     intent (`step_output`: pluginId/name/api_request_parameters) and the
+ *     model's own prose synthesis (`fulfillment.answer`). One of those three
+ *     probes (a live getMapView call) genuinely 500'd, which is what the
+ *     Map2D/Map3D fallback cards below actually handle — not a hypothetical.
+ *     Every "smart card" extractor in streamParsing.js is therefore an
+ *     honest best-effort parser over that prose + the real call parameters,
+ *     never a fabricated structured-JSON contract; it returns null (falls
+ *     back to the plain answer text) whenever the prose doesn't contain
+ *     enough signal to populate a card confidently.
+ *   - Any http(s) image URL detected in the streamed answer (bare or
+ *     markdown ![alt](url)) renders inline as a rounded dark-framed
+ *     thumbnail; 3+ images collapse into a 2xN grid. Every in-thread image
+ *     (assistant OR user-attached) opens a full lightbox + right-hand "Find
+ *     Information" panel on click.
+ *   - Markdown [label](url) links in the answer that match a citation are
+ *     rendered as numbered circular pills — clicking one (or the "Sources"
+ *     control) opens a right-side Sources drawer with a full card per pill.
+ *   - Composer supports image attachments: thumbnail-before-send with an
+ *     x-remove chip + filename. These render inline in the user's own bubble
+ *     immediately. NOTE (grounded in the live `submitquery` OpenAPI schema,
+ *     re-fetched this turn — query/endpointId/responseMode/pluginIds/
+ *     fulfillmentOnly/modelConfigs only): the documented API has no
+ *     image/attachment field, so attached files are NOT transmitted as pixel
+ *     data to the model — only their filenames are appended to the outbound
+ *     query text as context. This is disclosed, not silently faked.
  */
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Search, Send, ShieldAlert, Loader2, ChevronDown, ChevronRight,
   Radio as RadioIcon, AlertTriangle, RotateCcw, Info, Brain, Download,
+  Paperclip, X as XIcon,
 } from 'lucide-react';
 import { OSINT_PLUGIN_GROUPS, OSINT_DEFAULT_PLUGIN_IDS, OSINT_PLUGIN_BY_ID, MAX_PLUGIN_IDS } from './osintPlugins.js';
+import {
+  extractImageUrls, fileNameFromUrl, parsePluginCallsFull, buildSmartCards,
+  extractAllForMessage, extractCitations, extractCitationSnippet, citationPluginName,
+  buildFindInformation, buildFollowUps, RENDERER_KIND,
+} from './streamParsing.js';
+import {
+  InstagramProfileCard, InstagramCarousel, Map2DCard, Map3DCard, RedditThreadStack,
+  CitationChipRow, ImageGrid, FollowUpChips,
+} from './renderers.jsx';
+import { renderAnswerMarkdown } from './markdownLite.jsx';
+import ImageLightbox from './Lightbox.jsx';
+import SourcesDrawer from './SourcesDrawer.jsx';
 
 const REASONING_MODES = [
   { value: 'low', label: 'Low' },
@@ -65,25 +109,6 @@ async function chatApi(path, body) {
     throw err;
   }
   return json;
-}
-
-/** Bare/markdown image URLs found anywhere in `text` -> unique array of URLs. */
-const IMG_URL_RE = /(?:!\[[^\]]*\]\()?(https?:\/\/[^\s)"']+\.(?:png|jpe?g|gif|webp|svg)(?:\?[^\s)"']*)?)\)?/gi;
-function extractImageUrls(text) {
-  if (!text) return [];
-  const out = new Set();
-  let m;
-  IMG_URL_RE.lastIndex = 0;
-  // eslint-disable-next-line no-cond-assign
-  while ((m = IMG_URL_RE.exec(text))) out.add(m[1]);
-  return [...out];
-}
-function fileNameFromUrl(url) {
-  try {
-    return decodeURIComponent(new URL(url).pathname.split('/').filter(Boolean).pop() || 'image');
-  } catch {
-    return 'image';
-  }
 }
 
 const STARTER_PROMPTS = [
@@ -208,14 +233,21 @@ function PluginStatusChips({ activeNames, doneNames }) {
   );
 }
 
-/** Inline image renderer + persistent download link, for any image URL detected in the answer. */
-function InlineImages({ urls }) {
+/**
+ * Inline image renderer for the answer body — rounded dark frame, object-cover
+ * thumbnail, click-to-expand into the full lightbox, download affordance
+ * revealed on hover (CSS). 3+ images are handled by <ImageGrid> instead
+ * (denser Perplexity-style layout); this component covers 1-2.
+ */
+function InlineImages({ urls, onOpen }) {
   if (!urls.length) return null;
   return (
     <div className="chat-bubble__images">
-      {urls.map((url) => (
+      {urls.map((url, i) => (
         <figure key={url} className="chat-img-card">
-          <img src={url} alt="Assistant-provided" loading="lazy" />
+          <button type="button" className="chat-img-card__btn" onClick={() => onOpen(urls, i)} title="Expand image">
+            <img src={url} alt="Assistant-provided" loading="lazy" />
+          </button>
           <figcaption>
             <a href={url} target="_blank" rel="noopener noreferrer" download>
               <Download size={11} strokeWidth={1.9} /> {fileNameFromUrl(url)}
@@ -227,6 +259,24 @@ function InlineImages({ urls }) {
   );
 }
 
+/** User-attached image thumbnails rendered inline in the user's own bubble. */
+function UserAttachedImages({ images, onOpen }) {
+  if (!images?.length) return null;
+  return (
+    <div className="chat-bubble__images chat-bubble__images--user">
+      {images.map((img, i) => (
+        <figure key={img.url} className="chat-img-card">
+          <button type="button" className="chat-img-card__btn" onClick={() => onOpen(images.map((x) => x.url), i)} title="Expand image">
+            <img src={img.url} alt={img.name || 'Uploaded'} loading="lazy" />
+          </button>
+          <figcaption><span className="chat-img-card__name">{img.name}</span></figcaption>
+        </figure>
+      ))}
+    </div>
+  );
+}
+
+/** Attached-tools chips (session-scoped, distinct from in-answer citations below). */
 function SourceChips({ pluginIds }) {
   if (!pluginIds?.length) return null;
   return (
@@ -240,59 +290,105 @@ function SourceChips({ pluginIds }) {
   );
 }
 
-function ChatBubble({ msg }) {
+/** Dispatch a plugin call list to its smart-renderer cards (Instagram/Map/Reddit). */
+function SmartCards({ cards, onOpenLightbox }) {
+  if (!cards.length) return null;
+  return (
+    <div className="chat-bubble__cards">
+      {cards.map(({ kind, data }) => {
+        if (kind === RENDERER_KIND.INSTAGRAM_PROFILE) return <InstagramProfileCard key={kind} data={data} />;
+        if (kind === RENDERER_KIND.INSTAGRAM_MEDIA) {
+          // Videos have no still frame to show in an image lightbox — only
+          // image-kind items are ever passed through; if the clicked item was
+          // itself a video, land on the nearest image (index 0 of the filtered
+          // set) rather than mis-mapping to an unrelated index.
+          const imageItems = data.filter((it) => it.kind !== 'video');
+          const imageUrls = imageItems.map((it) => it.url);
+          return (
+            <InstagramCarousel
+              key={kind}
+              items={data}
+              onOpen={(urls, i) => {
+                if (!imageUrls.length) return;
+                const clicked = data[i];
+                const mapped = clicked && clicked.kind !== 'video' ? imageItems.findIndex((it) => it.url === clicked.url) : 0;
+                onOpenLightbox(imageUrls, mapped >= 0 ? mapped : 0);
+              }}
+            />
+          );
+        }
+        if (kind === RENDERER_KIND.MAP_2D) return <Map2DCard key={kind} data={data} />;
+        if (kind === RENDERER_KIND.MAP_3D) return <Map3DCard key={kind} data={data} />;
+        if (kind === RENDERER_KIND.REDDIT) return <RedditThreadStack key={kind} data={data} />;
+        return null;
+      })}
+    </div>
+  );
+}
+
+function ChatBubble({ msg, isLast, busy, onOpenLightbox, onOpenDrawer, onFollowUp }) {
   const isUser = msg.role === 'user';
   const imageUrls = useMemo(() => (isUser ? [] : extractImageUrls(msg.text)), [isUser, msg.text]);
   const activeNames = msg.activePlugins || [];
   const doneNames = msg.donePlugins || [];
 
+  const calls = useMemo(() => parsePluginCallsFull(msg.toolRaw), [msg.toolRaw]);
+  const smartCards = useMemo(() => (isUser ? [] : buildSmartCards(calls, msg.text)), [isUser, calls, msg.text]);
+  const citations = useMemo(() => (isUser ? [] : extractCitations(msg.text)), [isUser, msg.text]);
+  const extractedAll = useMemo(() => (isUser ? {} : extractAllForMessage(calls, msg.text)), [isUser, calls, msg.text]);
+  const followUps = useMemo(
+    () => (isLast && !isUser && !msg.pending && !msg.error ? buildFollowUps(extractedAll) : []),
+    [isLast, isUser, msg.pending, msg.error, extractedAll],
+  );
+
+  const handleOpenLightbox = useCallback((urls, index) => {
+    onOpenLightbox(urls, index, msg, extractedAll);
+  }, [onOpenLightbox, msg, extractedAll]);
+
+  const handleCiteClick = useCallback((n) => {
+    onOpenDrawer(msg, n);
+  }, [onOpenDrawer, msg]);
+
+  const useGrid = imageUrls.length >= 3;
+
   return (
     <div className={`chat-bubble ${isUser ? 'user' : 'assistant'}`}>
       <div className="chat-bubble__role">{isUser ? 'ANALYST' : 'OSINT ASSISTANT'}</div>
 
+      {isUser && <UserAttachedImages images={msg.images} onOpen={(urls, i) => onOpenLightbox(urls, i, msg, {})} />}
       {!isUser && <ThinkingPanel thinking={msg.thinking} live={msg.pending} answerStarted={Boolean(msg.text?.trim())} />}
       {!isUser && <PluginStatusChips activeNames={activeNames} doneNames={doneNames} />}
+      {!isUser && !msg.pending && !msg.error && <SmartCards cards={smartCards} onOpenLightbox={handleOpenLightbox} />}
 
       <div className="chat-bubble__text">
         {msg.pending && !msg.text?.trim() && !msg.thinking?.trim() && !activeNames.length && !doneNames.length ? (
           <span className="chat-bubble__pending"><Loader2 size={13} className="spin" /> Researching…</span>
         ) : msg.error ? (
           <span className="chat-bubble__error"><AlertTriangle size={12} strokeWidth={1.9} /> {msg.text}</span>
+        ) : isUser ? (
+          msg.text
         ) : (
           <>
-            {msg.text}
+            {renderAnswerMarkdown(msg.text, citations, handleCiteClick)}
             {msg.pending && msg.text?.trim() && <span className="chat-bubble__cursor" aria-hidden />}
           </>
         )}
       </div>
 
-      {!isUser && !msg.error && <InlineImages urls={imageUrls} />}
+      {!isUser && !msg.error && (useGrid
+        ? <ImageGrid urls={imageUrls} onOpen={handleOpenLightbox} />
+        : <InlineImages urls={imageUrls} onOpen={handleOpenLightbox} />)}
+      {!isUser && !msg.pending && !msg.error && <CitationChipRow citations={citations} onOpenDrawer={handleCiteClick} />}
       {!isUser && !msg.pending && !msg.error && <SourceChips pluginIds={msg.pluginIds} />}
       {!isUser && !msg.pending && !msg.error && (
         <div className="chat-bubble__caveat">Illustrative research aid — verify before treating as confirmed intelligence.</div>
       )}
+      {!isUser && followUps.length > 0 && <FollowUpChips chips={followUps} onPick={onFollowUp} disabled={busy} />}
     </div>
   );
 }
 
-/**
- * Parse plugin/tool names opportunistically out of the streamed step_output
- * JSON (same fenced/bare-JSON shape documented in ondemand-hq's
- * parseAgentic.js: {"plugins":[{"pluginId":"...","name":"..."}]}). Tolerates a
- * half-written payload — returns [] until the JSON closes.
- */
-function parsePluginNamesFromStepOutput(raw) {
-  if (!raw) return [];
-  const fenceMatch = raw.match(/```(?:json)?\s*([\s\S]*?)```/);
-  const candidate = fenceMatch ? fenceMatch[1] : raw;
-  try {
-    const parsed = JSON.parse(candidate);
-    if (Array.isArray(parsed?.plugins)) {
-      return parsed.plugins.map((p) => p.name || p.identifier || p.pluginId).filter(Boolean);
-    }
-  } catch { /* still streaming */ }
-  return [];
-}
+let attachmentSeq = 0;
 
 export default function ChatPanel() {
   const [health, setHealth] = useState(null);
@@ -303,8 +399,12 @@ export default function ChatPanel() {
   const [selectedIds, setSelectedIds] = useState(OSINT_DEFAULT_PLUGIN_IDS);
   const [toolsOpen, setToolsOpen] = useState(false);
   const [reasoningEffort, setReasoningEffort] = useState('medium');
+  const [attachments, setAttachments] = useState([]); // [{id, url, name}] — composer thumbnails-before-send
+  const [lightbox, setLightbox] = useState(null); // {urls, index, findInfo}
+  const [drawer, setDrawer] = useState(null); // {citations, focusN, snippetLookup, pluginLookup}
   const streamRef = useRef(null);
   const abortRef = useRef(null);
+  const fileInputRef = useRef(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -335,6 +435,44 @@ export default function ChatPanel() {
   }, []);
   const resetTools = useCallback(() => setSelectedIds(OSINT_DEFAULT_PLUGIN_IDS), []);
 
+  // ---- composer image attachments (thumbnail-before-send + x-remove chip) ----
+  const onAttachFiles = useCallback((fileList) => {
+    const files = Array.from(fileList || []).filter((f) => f.type.startsWith('image/'));
+    if (!files.length) return;
+    const next = files.map((f) => ({ id: `att-${Date.now()}-${attachmentSeq += 1}`, url: URL.createObjectURL(f), name: f.name }));
+    setAttachments((prev) => [...prev, ...next].slice(0, 6));
+  }, []);
+  const removeAttachment = useCallback((id) => {
+    setAttachments((prev) => prev.filter((a) => a.id !== id));
+  }, []);
+
+  // ---- lightbox / find-information ----
+  const openLightbox = useCallback((urls, index, msg, extractedAll) => {
+    const findInfo = buildFindInformation(urls[index], msg, extractedAll);
+    setLightbox({ urls, index, msg, extractedAll, findInfo });
+  }, []);
+  const closeLightbox = useCallback(() => setLightbox(null), []);
+  const navLightbox = useCallback((delta) => {
+    setLightbox((prev) => {
+      if (!prev) return prev;
+      const nextIndex = (prev.index + delta + prev.urls.length) % prev.urls.length;
+      return { ...prev, index: nextIndex, findInfo: buildFindInformation(prev.urls[nextIndex], prev.msg, prev.extractedAll) };
+    });
+  }, []);
+
+  // ---- sources drawer ----
+  const openDrawer = useCallback((msg, focusN) => {
+    const citations = extractCitations(msg.text);
+    if (!citations.length) return;
+    setDrawer({
+      citations,
+      focusN: focusN || null,
+      snippetLookup: (c) => extractCitationSnippet(msg.text, c.url),
+      pluginLookup: () => citationPluginName(msg.donePlugins),
+    });
+  }, []);
+  const closeDrawer = useCallback(() => setDrawer(null), []);
+
   const ensureSession = useCallback(async () => {
     if (sessionId) return sessionId;
     const r = await chatApi('/api/chat/session', { pluginIds: selectedIds });
@@ -346,7 +484,7 @@ export default function ChatPanel() {
    * Reads the raw SSE body from POST /api/chat/query?stream=1 and dispatches
    * each frame to `onEvent(eventType, evt)` — a byte-for-byte pass-through of
    * whatever OnDemand itself sent (see server/chatLiveProxy.js). Terminates on
-   * a literal `data: [DONE]` line.
+   * a literal `data: [DONE]` line. UNCHANGED from the prior turn.
    */
   const streamQuery = useCallback(async (sid, query, pluginIds, effort, onEvent, signal) => {
     const res = await fetch('/api/chat/query?stream=1', {
@@ -392,7 +530,8 @@ export default function ChatPanel() {
 
   const send = useCallback(async (raw) => {
     const query = (raw ?? text).trim();
-    if (!query || busy) return;
+    const pendingAttachments = attachments;
+    if ((!query && !pendingAttachments.length) || busy) return;
     if (health && health.hasApiKey === false) {
       setMessages((m) => [...m, { id: `u-${Date.now()}`, role: 'user', text: query }, {
         id: `e-${Date.now()}`, role: 'assistant', error: true,
@@ -402,7 +541,23 @@ export default function ChatPanel() {
       return;
     }
     setText('');
-    const userMsg = { id: `u-${Date.now()}`, role: 'user', text: query };
+    setAttachments([]);
+
+    // Attached filenames are appended as textual context — the documented
+    // submitquery schema (query/endpointId/responseMode/pluginIds/
+    // fulfillmentOnly/modelConfigs) has no image/attachment field, so the
+    // model receives the filenames, not the pixel data. Images still render
+    // inline in the user's own bubble immediately (see UserAttachedImages).
+    const outboundQuery = pendingAttachments.length
+      ? `${query}\n\n[User attached ${pendingAttachments.length} image file(s) for context: ${pendingAttachments.map((a) => a.name).join(', ')}]`
+      : query;
+
+    const userMsg = {
+      id: `u-${Date.now()}`,
+      role: 'user',
+      text: query || '(image attached)',
+      images: pendingAttachments.length ? pendingAttachments.map((a) => ({ url: a.url, name: a.name })) : undefined,
+    };
     const liveId = `a-${Date.now()}`;
     const liveMsg = {
       id: liveId, role: 'assistant', pending: true, text: '', thinking: '',
@@ -417,7 +572,7 @@ export default function ChatPanel() {
 
     try {
       const sid = await ensureSession();
-      await streamQuery(sid, query, selectedIds, reasoningEffort, (type, evt) => {
+      await streamQuery(sid, outboundQuery, selectedIds, reasoningEffort, (type, evt) => {
         if (type === 'planning_thinking' || type === 'step_thinking') {
           const delta = evt?.thinking?.delta;
           if (typeof delta === 'string' && delta) patch((x) => ({ ...x, thinking: (x.thinking || '') + delta }));
@@ -425,7 +580,7 @@ export default function ChatPanel() {
           const delta = evt?.output?.delta || '';
           patch((x) => {
             const toolRaw = (x.toolRaw || '') + delta;
-            const names = parsePluginNamesFromStepOutput(toolRaw);
+            const names = parsePluginCallsFull(toolRaw).map((c) => c.name);
             return names.length ? { ...x, toolRaw, activePlugins: names } : { ...x, toolRaw };
           });
         } else if (type === 'planning_output') {
@@ -464,7 +619,7 @@ export default function ChatPanel() {
       setBusy(false);
       abortRef.current = null;
     }
-  }, [text, busy, health, ensureSession, selectedIds, reasoningEffort, streamQuery]);
+  }, [text, attachments, busy, health, ensureSession, selectedIds, reasoningEffort, streamQuery]);
 
   const onKeyDown = (e) => {
     if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); }
@@ -473,6 +628,12 @@ export default function ChatPanel() {
   const keyMissing = health && health.hasApiKey === false;
   const isEmpty = messages.length === 0;
   const modelLabel = health?.modelLabel || 'Gemini 3.7 Flash';
+  const lastAssistantId = useMemo(() => {
+    for (let i = messages.length - 1; i >= 0; i -= 1) {
+      if (messages[i].role === 'assistant') return messages[i].id;
+    }
+    return null;
+  }, [messages]);
 
   return (
     <div className="chat-pane">
@@ -510,7 +671,17 @@ export default function ChatPanel() {
             </div>
           </div>
         ) : (
-          messages.map((m) => <ChatBubble key={m.id} msg={m} />)
+          messages.map((m) => (
+            <ChatBubble
+              key={m.id}
+              msg={m}
+              isLast={m.id === lastAssistantId}
+              busy={busy}
+              onOpenLightbox={openLightbox}
+              onOpenDrawer={openDrawer}
+              onFollowUp={(chip) => send(chip)}
+            />
+          ))
         )}
       </div>
 
@@ -524,7 +695,38 @@ export default function ChatPanel() {
         onToggleOpen={() => setToolsOpen((o) => !o)}
       />
 
+      {attachments.length > 0 && (
+        <div className="chat-attachments">
+          {attachments.map((a) => (
+            <div key={a.id} className="chat-attachment-chip">
+              <img src={a.url} alt={a.name} />
+              <span className="chat-attachment-chip__name">{a.name}</span>
+              <button type="button" onClick={() => removeAttachment(a.id)} aria-label={`Remove ${a.name}`}>
+                <XIcon size={11} strokeWidth={2.2} />
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+
       <div className="chat-composer">
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept="image/*"
+          multiple
+          className="chat-composer__file-input"
+          onChange={(e) => { onAttachFiles(e.target.files); e.target.value = ''; }}
+        />
+        <button
+          type="button"
+          className="chat-composer__attach"
+          onClick={() => fileInputRef.current?.click()}
+          disabled={busy}
+          title="Attach image"
+        >
+          <Paperclip size={14} strokeWidth={1.9} />
+        </button>
         <textarea
           rows={1}
           className="chat-composer__input"
@@ -534,7 +736,13 @@ export default function ChatPanel() {
           onKeyDown={onKeyDown}
           disabled={busy}
         />
-        <button type="button" className="chat-composer__send" onClick={() => send()} disabled={busy || !text.trim()} title="Send">
+        <button
+          type="button"
+          className="chat-composer__send"
+          onClick={() => send()}
+          disabled={busy || (!text.trim() && !attachments.length)}
+          title="Send"
+        >
           {busy ? <Loader2 size={15} className="spin" /> : <Send size={15} strokeWidth={1.9} />}
         </button>
       </div>
@@ -542,6 +750,25 @@ export default function ChatPanel() {
         {modelLabel} · {REASONING_MODES.find((m) => m.value === reasoningEffort)?.label || reasoningEffort} reasoning ·{' '}
         {selectedIds.length} OnDemand tool{selectedIds.length === 1 ? '' : 's'} attached · illustrative research aid only
       </div>
+
+      {lightbox && (
+        <ImageLightbox
+          urls={lightbox.urls}
+          index={lightbox.index}
+          findInfo={lightbox.findInfo}
+          onClose={closeLightbox}
+          onNav={navLightbox}
+        />
+      )}
+      {drawer && (
+        <SourcesDrawer
+          citations={drawer.citations}
+          focusN={drawer.focusN}
+          onClose={closeDrawer}
+          snippetLookup={drawer.snippetLookup}
+          pluginLookup={drawer.pluginLookup}
+        />
+      )}
     </div>
   );
 }
