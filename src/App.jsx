@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState, useCallback } from 'react';
 import {
   Video, Crosshair, Eye, Map as MapIcon, Plane, Radar, Focus, Navigation,
   Flame, Radio, Shield, Layers, Mic, MicOff, Play, Pause, RotateCcw,
-  Clock, Building2, FileText, BookOpen, Globe2, Target, Waypoints,
+  Clock, Building2, FileText, BookOpen, Globe2, Target, Waypoints, Search,
 } from 'lucide-react';
 import CesiumScene from './cesium/CesiumScene.js';
 import { mountShahedInspector } from './three/Shahed136.js';
@@ -12,6 +12,7 @@ import {
   analyzeThermal, VIIRS_DETECTIONS, INTEL, IMAGERY,
 } from './data/scenario.js';
 import { HUD_FRAME } from './brand/assets.js';
+import ChatPanel from './chat/ChatPanel.jsx';
 
 // Official On Demand lockup — prefer logo_header / logo_dark for dark chrome.
 const OD_LOGO_SRC = `${import.meta.env.BASE_URL || '/'}brand/logo-header.png`;
@@ -44,6 +45,8 @@ const TABS = [
   { id: 'entities', label: 'Entities', Icon: Target },
   { id: 'briefing', label: 'Briefing', Icon: FileText },
   { id: 'sources', label: 'Sources', Icon: BookOpen },
+  // OSINT research assistant — defensive/preventive open-source research only.
+  { id: 'chat', label: 'Chat', Icon: Search },
 ];
 
 const Svg = ({ markup, className, style }) => (
@@ -607,8 +610,27 @@ export default function App() {
       <div ref={cesiumRef} className="cesium-host" style={{ visibility: theatreActive ? 'visible' : 'hidden' }} />
       {thermal && theatreActive && <div className="thermal-overlay" />}
 
+      {/* Chat tab — OSINT research assistant. Own full-bleed pane (not the narrow
+          left-rail placeholder pattern below) so the message stream + composer
+          have room to breathe. Defensive/preventive OSINT research only. */}
+      {activeTab === 'chat' && (
+        <div
+          className="chat-tab-host"
+          style={{
+            position: 'absolute',
+            top: 'calc(var(--appbar-h) + var(--tab-h) + var(--chrome-gap))',
+            left: 'calc(var(--obj-rail-w) + var(--chrome-gap))',
+            right: 'var(--chrome-gap)',
+            bottom: 52,
+            zIndex: 50,
+          }}
+        >
+          <ChatPanel />
+        </div>
+      )}
+
       {/* Non-theatre chrome panes (placeholders; no logic change) */}
-      {!theatreActive && (
+      {!theatreActive && activeTab !== 'chat' && (
         <aside className="left-rail" style={{ left: 'calc(var(--obj-rail-w) + var(--chrome-gap))', right: 'var(--chrome-gap)', width: 'auto' }}>
           <div className="tab-pane panel">
             {activeTab === 'timeline' && (
