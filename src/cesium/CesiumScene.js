@@ -969,6 +969,48 @@ export default class CesiumScene {
         ),
       });
     }
+
+    // "OPEN THE NET" defensive awareness envelope — a wider, illustrative
+    // dashed ring (1.4x the geofence radius) representing an EXPANDED
+    // sensor/detection net, distinct from the tighter endurance geofence
+    // above. DEFENSIVE/PREVENTIVE ONLY: a passive detection-radius
+    // visualization, no targeting/weapon semantics. Hidden by default
+    // (this.netEnvelopeEntity.show = false); toggled by setNetEnvelope(on),
+    // which App.jsx calls whenever the existing "Open the net" AVM voice
+    // toggle opens/closes (netOpen state) — purely additive, the AVM voice
+    // logic itself is untouched.
+    this.netEnvelopeEntity = v.entities.add({
+      position: carto(GEOFENCE.centerLon, GEOFENCE.centerLat, 0),
+      ellipse: {
+        semiMajorAxis: GEOFENCE.radiusM * 1.4, semiMinorAxis: GEOFENCE.radiusM * 1.4,
+        material: new C.StripeMaterialProperty({
+          evenColor: C.Color.fromCssColorString(BRAND.accent).withAlpha(0.05),
+          oddColor: C.Color.TRANSPARENT,
+          repeat: 48,
+        }),
+        outline: true,
+        outlineColor: C.Color.fromCssColorString(BRAND.accent).withAlpha(0.65),
+        outlineWidth: 1.5,
+        height: 400,
+      },
+      show: false,
+    });
+    this.netEnvelopeLabel = v.entities.add({
+      position: carto(GEOFENCE.centerLon, GEOFENCE.centerLat + (GEOFENCE.radiusM * 1.4) / 111_000, 400),
+      label: clearLabel(
+        'AWARENESS NET · EXPANDED SENSOR ENVELOPE',
+        '#D8DDE3',
+        {
+          font: '600 12px "IBM Plex Sans", Segoe UI, Arial, sans-serif',
+          outlineWidth: 2,
+          ddcFar: 1_500_000,
+          primary: false,
+          bgCss: '#0F1A17',
+          bgAlpha: 0.9,
+        },
+      ),
+      show: false,
+    });
   }
 
   _findGeofenceCrossing() {
@@ -1721,6 +1763,19 @@ export default class CesiumScene {
     if (name === 'corridor' && this.corridorEntity) this.corridorEntity.show = on;
     if (name === 'geofence' && this.geofenceEntity) this.geofenceEntity.show = on;
     if (name === 'waypoints') this.waypointEntities.forEach((e) => (e.show = on));
+  }
+
+  // "OPEN THE NET" — toggles the wider defensive awareness/sensor envelope
+  // (see _buildStatic()). Called from App.jsx whenever the existing AVM voice
+  // "Open the net" control opens/closes; purely additive visual, no effect on
+  // the voice/AVM logic itself. Fully guarded so a pre-ready call (e.g. during
+  // React's initial mount before the constructor finishes) never throws.
+  setNetEnvelope(on) {
+    try {
+      if (this.netEnvelopeEntity) this.netEnvelopeEntity.show = !!on;
+      if (this.netEnvelopeLabel) this.netEnvelopeLabel.show = !!on;
+      this.viewer?.scene?.requestRender();
+    } catch (_) {}
   }
 
   // Realism tuning for ANY Cesium3DTileset already configured in the scene
