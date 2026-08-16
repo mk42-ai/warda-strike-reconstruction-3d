@@ -29,6 +29,10 @@ const AVM_CONVERSATION_STARTER =
   'the protected site, or the corridor — and I will answer in conversation.';
 
 const API_HOST = process.env.ON_DEMAND_API_HOST || 'https://api.on-demand.io';
+// Live-docs-verified 2026-08-16: converttexttoaudio / convertaudiototext
+// servers[0].url = https://api.on-demand.io/services/v1/public/service
+const SERVICES_HOST = process.env.ON_DEMAND_SERVICES_HOST
+  || `${API_HOST}/services/v1/public/service`;
 
 function apiKey() {
   return (
@@ -86,7 +90,7 @@ function odFetch(method, path, body) {
 async function ttsSpeak(text) {
   const input = String(text || '').trim().slice(0, 900);
   if (!input) return { audioUrl: null };
-  const r = await odFetch('POST', '/services/v1/public/service/execute/text_to_speech', {
+  const r = await odFetch('POST', `${SERVICES_HOST}/execute/text_to_speech`, {
     model: 'tts-1',
     input,
     voice: 'nova',
@@ -149,7 +153,7 @@ function send(res, status, obj) {
   res.setHeader('Cache-Control', 'no-store');
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET,POST,OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, apikey');
   res.end(JSON.stringify(obj));
 }
 
@@ -159,7 +163,7 @@ export default async function handler(req, res) {
       res.statusCode = 204;
       res.setHeader('Access-Control-Allow-Origin', '*');
       res.setHeader('Access-Control-Allow-Methods', 'GET,POST,OPTIONS');
-      res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+      res.setHeader('Access-Control-Allow-Headers', 'Content-Type, apikey');
       res.end();
       return;
     }
@@ -183,6 +187,7 @@ export default async function handler(req, res) {
         ttsPrimary: false,
         stsPrimary: false,
         hasApiKey: Boolean(apiKey()),
+        servicesHost: SERVICES_HOST,
         runtime: 'vercel-serverless',
       });
     }
@@ -250,6 +255,19 @@ export default async function handler(req, res) {
       const body = typeof req.body === 'string' ? JSON.parse(req.body || '{}') : req.body || {};
       const t = await ttsSpeak(body.text || '');
       return send(res, 200, { ok: true, audioUrl: t.audioUrl, http: t.http });
+    }
+
+    if (req.method === 'POST' && action === 'transcribe') {
+      const body = typeof req.body === 'string' ? JSON.parse(req.body || '{}') : req.body || {};
+      const audioUrl = body.audioUrl || body.url;
+      if (!audioUrl) return send(res, 400, { ok: false, error: 'audioUrl_required' });
+      const r = await odFetch('POST', `${SERVICES_HOST}/execute/speech_to_text`, { audioUrl });
+      if (r.status >= 400) {
+        const err = new Error(`stt_http_${r.status}`);
+        err.detail = r.json || r.text;
+        throw err;
+      }
+      return send(res, 200, { ok: true, text: r.json?.data?.text || '', http: r.status });
     }
 
     return send(res, 404, { ok: false, error: 'unknown_avm_route', action });

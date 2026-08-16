@@ -14,12 +14,28 @@
     <link rel="preconnect" href="https://elevation3d.arcgis.com" crossorigin />
     <link rel="preconnect" href="https://a.basemaps.cartocdn.com" crossorigin />
     <link rel="icon" type="image/svg+xml" href="/brand/ondemand-icon.svg" />
+    <script>
+      // Resolve boot-screen logo against Vite BASE_URL so a copied Vercel /
+      // sandbox host (or a non-root base) still serves /brand/*.png as PNG,
+      // not the SPA HTML fallback.
+      (function () {
+        var base = '/';
+        try {
+          var s = document.currentScript || document.querySelector('script[src*="main"]');
+          if (s && s.src) {
+            var u = new URL(s.src, location.href);
+            base = u.pathname.replace(/src\/main\.jsx.*$/, '').replace(/assets\/.*$/, '');
+          }
+        } catch (_) {}
+        window.__ASSET_BASE__ = base.endsWith('/') ? base : base + '/';
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>
     <div id="boot-screen">
       <div class="boot-inner">
-        <img class="boot-logo" src="/brand/od-logo-black.png" alt="On Demand" height="28" />
+        <img class="boot-logo" src="/brand/od-logo-black.png" alt="On Demand" height="28" onerror="this.onerror=null;this.src=(window.__ASSET_BASE__||'/')+'brand/ondemand-icon.svg';" />
         <div class="boot-ring"></div>
         <div class="boot-title">On Demand · Sentinel</div>
         <div class="boot-sub">IMP-08 — initializing theatre…</div>

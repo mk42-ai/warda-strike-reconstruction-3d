@@ -293,28 +293,35 @@ export const INTEL = {
 };
 
 // ---- OnDemand-branded imagery references (wired into the build) -------------
+// Prefix every static asset with Vite's BASE_URL so a copied Vercel/sandbox
+// host (or a non-root base) still resolves /imagery and /brand correctly.
+const ASSET_BASE = (typeof import.meta !== 'undefined' && import.meta.env && import.meta.env.BASE_URL)
+  ? import.meta.env.BASE_URL
+  : '/';
+const assetUrl = (p) => `${ASSET_BASE}${String(p).replace(/^\//, '')}`;
+
 export const IMAGERY = {
   // REAL server-side captured satellite / 3D-photorealistic tiles, bundled
   // locally under /imagery (no client-side Cesium/Google key, no runtime tile
   // network call). Captures: Al Warqa impact site (2D + 3D), Dubai overview
   // (2D + 3D), Bandar Abbas launch area (3D), Gulf-corridor midpoint (3D).
-  droneHero: '/imagery/alwarqa-3d.png',                 // HERO = Al Warqa 3D photorealistic impact site (vbAUhtiHcB)
-  heroVariations: ['/imagery/alwarqa-2d.png', '/imagery/dubai-3d.png', '/imagery/alwarqa-3d.png'],
+  droneHero: assetUrl('imagery/alwarqa-3d.png'),                 // HERO = Al Warqa 3D photorealistic impact site (vbAUhtiHcB)
+  heroVariations: [assetUrl('imagery/alwarqa-2d.png'), assetUrl('imagery/dubai-3d.png'), assetUrl('imagery/alwarqa-3d.png')],
   heroLabels: ['Top-down 2D (impact)', 'Dubai 3D corridor', 'Terminal approach'],
   // Backdrop / ground-overlay / skybox panels along the Bandar Abbas → Al Warqa corridor
   backdrop: {
-    groundOverlay: '/imagery/dubai-2d.png',             // Dubai overview 2D satellite ground texture near impact (eCI3Mv3Ziv)
-    dubai3d: '/imagery/dubai-3d.png',                    // Dubai overview 3D photorealistic backdrop (ZOGoYtDcJt)
-    launchArea: '/imagery/bandar-abbas-3d.png',          // Bandar Abbas / Gulf launch area 3D (SsZED0AulJ)
-    corridorMid: '/imagery/gulf-midpoint-3d.png',        // Gulf-corridor midpoint 3D (GCRxQH98Bm)
+    groundOverlay: assetUrl('imagery/dubai-2d.png'),             // Dubai overview 2D satellite ground texture near impact (eCI3Mv3Ziv)
+    dubai3d: assetUrl('imagery/dubai-3d.png'),                    // Dubai overview 3D photorealistic backdrop (ZOGoYtDcJt)
+    launchArea: assetUrl('imagery/bandar-abbas-3d.png'),          // Bandar Abbas / Gulf launch area 3D (SsZED0AulJ)
+    corridorMid: assetUrl('imagery/gulf-midpoint-3d.png'),        // Gulf-corridor midpoint 3D (GCRxQH98Bm)
   },
   captures: {
-    alwarqa2d: { file: '/imagery/alwarqa-2d.png', lat: 25.1858, lon: 55.4045, kind: '2D satellite (impact)' },
-    alwarqa3d: { file: '/imagery/alwarqa-3d.png', lat: 25.1858, lon: 55.4045, kind: '3D photorealistic (impact)' },
-    dubai2d: { file: '/imagery/dubai-2d.png', lat: 25.2048, lon: 55.2708, kind: '2D satellite (overview)' },
-    dubai3d: { file: '/imagery/dubai-3d.png', lat: 25.2048, lon: 55.2708, kind: '3D photorealistic (overview)' },
-    bandarAbbas3d: { file: '/imagery/bandar-abbas-3d.png', lat: 27.1842, lon: 56.2893, kind: '3D (launch area)' },
-    gulfMid3d: { file: '/imagery/gulf-midpoint-3d.png', lat: 26.185, lon: 55.8469, kind: '3D (corridor midpoint)' },
+    alwarqa2d: { file: assetUrl('imagery/alwarqa-2d.png'), lat: 25.1858, lon: 55.4045, kind: '2D satellite (impact)' },
+    alwarqa3d: { file: assetUrl('imagery/alwarqa-3d.png'), lat: 25.1858, lon: 55.4045, kind: '3D photorealistic (impact)' },
+    dubai2d: { file: assetUrl('imagery/dubai-2d.png'), lat: 25.2048, lon: 55.2708, kind: '2D satellite (overview)' },
+    dubai3d: { file: assetUrl('imagery/dubai-3d.png'), lat: 25.2048, lon: 55.2708, kind: '3D photorealistic (overview)' },
+    bandarAbbas3d: { file: assetUrl('imagery/bandar-abbas-3d.png'), lat: 27.1842, lon: 56.2893, kind: '3D (launch area)' },
+    gulfMid3d: { file: assetUrl('imagery/gulf-midpoint-3d.png'), lat: 26.185, lon: 55.8469, kind: '3D (corridor midpoint)' },
   },
   note: 'Server-side captured tiles — fully offline, no client-side token or external tile request at runtime.',
 };

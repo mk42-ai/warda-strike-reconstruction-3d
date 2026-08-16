@@ -685,7 +685,7 @@ export default class CesiumScene {
     //     for the terminal-dive close-up (a real committed satellite capture —
     //     NOT AI-generated). SingleTileImageryProvider.fromUrl (the constructor
     //     is deprecated in Cesium 1.122) → wrapped in fromProviderAsync.
-    this._addDetailPatch('/imagery/alwarqa-2d.png', 55.4045, 25.1858, 0.06, 1.0);
+    this._addDetailPatch(IMAGERY.captures.alwarqa2d.file, 55.4045, 25.1858, 0.06, 1.0);
   }
 
   // Drape one high-detail local capture as a georeferenced imagery layer on top

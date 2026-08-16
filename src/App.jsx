@@ -13,6 +13,7 @@ import {
 } from './data/scenario.js';
 import { HUD_FRAME } from './brand/assets.js';
 import ChatPanel from './chat/ChatPanel.jsx';
+import { loadVoiceConfig, saveVoiceConfig } from './utils/voiceConfig.js';
 
 // Official On Demand lockup — prefer logo_header / logo_dark for dark chrome.
 const OD_LOGO_SRC = `${import.meta.env.BASE_URL || '/'}brand/logo-header.png`;
@@ -80,9 +81,22 @@ async function avmApi(path, body) {
     headers: body === undefined ? undefined : { 'Content-Type': 'application/json' },
     body: body === undefined ? undefined : JSON.stringify(body),
   });
+  const ct = (res.headers.get('content-type') || '').toLowerCase();
   let json = null;
-  try { json = await res.json(); } catch (_) { json = null; }
-  if (!res.ok) {
+  if (ct.includes('application/json')) {
+    try { json = await res.json(); } catch (_) { json = null; }
+  } else {
+    // SPA rewrite / missing middleware served HTML — treat as a missing route,
+    // never as a successful health payload (that would skip the API-key check).
+    const err = new Error(
+      res.ok
+        ? 'Voice API returned HTML instead of JSON — /api/avm is not mounted on this host.'
+        : `HTTP ${res.status}`,
+    );
+    err.status = res.status;
+    throw err;
+  }
+  if (!res.ok || (json && json.ok === false)) {
     const msg = (json && (json.error || json.message)) || `HTTP ${res.status}`;
     const err = new Error(msg);
     err.status = res.status;
@@ -188,9 +202,14 @@ export default function App() {
       setReady(true);   // never leave the UI stuck behind the boot overlay
     }
 
-    // hide boot screen (always, even on init error)
+    // hide boot screen immediately after mount (always, even on init error).
+    // A long delay left crawlers / first-paint screenshots stuck on
+    // "initializing theatre…" even though the globe was already live.
     const boot = document.getElementById('boot-screen');
-    if (boot) setTimeout(() => boot.classList.add('hidden'), 900);
+    if (boot) {
+      requestAnimationFrame(() => boot.classList.add('hidden'));
+      setTimeout(() => boot.classList.add('hidden'), 280);
+    }
 
     try { if (inspectorRef.current) insp = mountShahedInspector(inspectorRef.current); } catch (_) {}
     return () => {
@@ -332,7 +351,7 @@ export default function App() {
       setVoicePhase('error');
       return;
     }
-    rec.lang = 'en-US';
+    rec.lang = loadVoiceConfig().preferredLang || 'en-US';
     rec.continuous = false;
     rec.interimResults = false;
     rec.maxAlternatives = 1;
@@ -406,12 +425,18 @@ export default function App() {
           throw new Error('Server missing ON_DEMAND_API_KEY — cannot open live net.');
         }
       } catch (e) {
-        if (e?.message?.includes('ON_DEMAND_API_KEY')) throw e;
-        // health optional if route cold
+        if (e?.message?.includes('ON_DEMAND_API_KEY') || e?.message?.includes('/api/avm')) throw e;
+        // health optional if route is still cold-starting
       }
       const sess = await avmApi('/api/avm/session', {});
       if (!netOpenRef.current) return;
       sessionIdRef.current = sess.sessionId;
+      saveVoiceConfig({
+        lastSessionId: sess.sessionId,
+        lastWorkflowId: sess.workflowId || AVM_WORKFLOW_ID,
+        lastEndpointId: sess.endpointId || null,
+        preferredLang: loadVoiceConfig().preferredLang || 'en-US',
+      });
       const starter = sess.conversationStarter || 'Live net open. Speak your question.';
       setVoiceCaption(`NET: ${starter}`);
       if (sess.starterAudioUrl && audioRef.current) {

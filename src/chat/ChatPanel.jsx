@@ -99,8 +99,19 @@ async function chatApi(path, body) {
     headers: body === undefined ? undefined : { 'Content-Type': 'application/json' },
     body: body === undefined ? undefined : JSON.stringify(body),
   });
+  const ct = (res.headers.get('content-type') || '').toLowerCase();
   let json = null;
-  try { json = await res.json(); } catch { json = null; }
+  if (ct.includes('application/json')) {
+    try { json = await res.json(); } catch { json = null; }
+  } else {
+    const err = new Error(
+      res.ok
+        ? 'Chat API returned HTML instead of JSON — /api/chat is not mounted on this host.'
+        : `HTTP ${res.status}`,
+    );
+    err.status = res.status;
+    throw err;
+  }
   if (!res.ok || (json && json.ok === false)) {
     const msg = (json && (json.error || json.message)) || `HTTP ${res.status}`;
     const err = new Error(msg);

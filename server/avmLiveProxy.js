@@ -35,7 +35,23 @@ export const AVM_ENDPOINT_ID = 'predefined-deepseek-v4-flash';
 export const AVM_MODEL_ID = 'predefined-deepseek-v4-flash';
 export const AVM_REASONING_MODE = 'predefined-deepseek-v4-flash';
 
+// Live-docs-verified 2026-08-16 (GET /config/v1/public/docs/reference/api/{slug}):
+//   Chat / Media host: https://api.on-demand.io  (apikey header)
+//   Services TTS/STT:  https://api.on-demand.io/services/v1/public/service
+//     POST /execute/text_to_speech  {model, input, voice} → data.audioUrl
+//     POST /execute/speech_to_text  {audioUrl}            → data.text
 const API_HOST = process.env.ON_DEMAND_API_HOST || 'https://api.on-demand.io';
+const SERVICES_HOST = process.env.ON_DEMAND_SERVICES_HOST
+  || `${API_HOST}/services/v1/public/service`;
+
+function apiKey() {
+  return (
+    process.env.ON_DEMAND_API_KEY ||
+    process.env.ONDEMAND_API_KEY ||
+    process.env.VITE_ONDEMAND_API_KEY ||
+    ''
+  );
+}
 
 function readBody(req) {
   return new Promise((resolve, reject) => {
@@ -63,7 +79,7 @@ function send(res, status, obj) {
 }
 
 function odFetch(method, path, body) {
-  const key = process.env.ON_DEMAND_API_KEY || '';
+  const key = apiKey();
   if (!key) {
     return Promise.reject(new Error('ON_DEMAND_API_KEY missing on server'));
   }
@@ -113,7 +129,10 @@ function odFetch(method, path, body) {
 async function ttsSpeak(text) {
   const input = String(text || '').trim().slice(0, 900);
   if (!input) return { audioUrl: null };
-  const r = await odFetch('POST', '/services/v1/public/service/execute/text_to_speech', {
+  // Live OpenAPI (converttexttoaudio, 2026-08-16): servers[0].url =
+  //   https://api.on-demand.io/services/v1/public/service
+  //   POST /execute/text_to_speech  {model, input, voice} → data.audioUrl
+  const r = await odFetch('POST', `${SERVICES_HOST}/execute/text_to_speech`, {
     model: 'tts-1',
     input,
     voice: 'nova',
@@ -211,7 +230,8 @@ export function avmLiveProxyPlugin() {
               staticMp3Primary: false,
               ttsPrimary: false,
               stsPrimary: false,
-              hasApiKey: Boolean(process.env.ON_DEMAND_API_KEY),
+              hasApiKey: Boolean(apiKey()),
+              servicesHost: SERVICES_HOST,
             });
           }
 
@@ -277,6 +297,24 @@ export function avmLiveProxyPlugin() {
             const body = await readBody(req);
             const t = await ttsSpeak(body.text || '');
             return send(res, 200, { ok: true, audioUrl: t.audioUrl, http: t.http });
+          }
+
+          // Live-docs STT: POST /execute/speech_to_text { audioUrl } → data.text
+          if (req.method === 'POST' && (url === '/api/avm/transcribe' || url.startsWith('/api/avm/transcribe?'))) {
+            const body = await readBody(req);
+            const audioUrl = body.audioUrl || body.url;
+            if (!audioUrl) return send(res, 400, { ok: false, error: 'audioUrl_required' });
+            const r = await odFetch('POST', `${SERVICES_HOST}/execute/speech_to_text`, { audioUrl });
+            if (r.status >= 400) {
+              const err = new Error(`stt_http_${r.status}`);
+              err.detail = r.json || r.text;
+              throw err;
+            }
+            return send(res, 200, {
+              ok: true,
+              text: r.json?.data?.text || '',
+              http: r.status,
+            });
           }
 
           return send(res, 404, { ok: false, error: 'unknown_avm_route' });
