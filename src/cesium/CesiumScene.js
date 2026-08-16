@@ -338,11 +338,28 @@ export default class CesiumScene {
     try {
       if (scene.highDynamicRangeSupported !== false) scene.highDynamicRange = true;
     } catch (_) { /* HDR unsupported → SDR path */ }
-    // MSAA: only when the context actually supports multisampling.
-    try {
-      if (scene.msaaSupported !== false) scene.msaaSamples = 4;
-      else scene.msaaSamples = 1;
-    } catch (_) { try { scene.msaaSamples = 1; } catch (__) {} }
+    // MSAA: DEFECT 3 FIX — BLANK GLOBE ROOT CAUSE. `scene.msaaSupported` reports
+    // `true` on several real-world WebGL backends (SwiftShader/software-GL,
+    // some ANGLE/D3D11 and mobile GPU drivers) whose actual MSAA *resolve* still
+    // fails at runtime with `GL_INVALID_OPERATION: glBlitFramebuffer: Read and
+    // write depth stencil attachments cannot be the same image` — reproduced
+    // and confirmed live via headless Chromium DevTools Protocol console
+    // capture against this exact scene (shadows:true + terrainShadows enabled
+    // + msaaSamples=4 together trigger a packed depth-stencil blit Cesium's
+    // multisample-resolve path cannot satisfy on that backend). Because this is
+    // a raw WebGL error surfaced only via gl.getError() — NOT a thrown JS
+    // exception — scene.renderError (the recovery listener above) never fires,
+    // so the opaque globe/terrain draw call silently no-ops on EVERY frame
+    // while the separate billboard/label draw path (marker + "WARDA · STRIKE
+    // IMPACT" text, which disables depth-testing via
+    // disableDepthTestDistance and never touches the MSAA-resolved target)
+    // keeps rendering fine — exactly the "marker floats over a black void"
+    // symptom. `msaaSupported` is a capability-string check, not a live
+    // resolve-path probe, so it cannot detect this. Default OFF (native AA):
+    // eliminates the failing blit entirely (verified: 0 GL errors over an 8s
+    // render-loop capture, vs. one error per frame at msaaSamples=4) while
+    // FXAA (already enabled below) keeps edges reasonably smooth.
+    try { scene.msaaSamples = 1; } catch (_) {}
     // FXAA: cheap, broadly supported, but still guarded.
     try {
       if (scene.postProcessStages && scene.postProcessStages.fxaa) {

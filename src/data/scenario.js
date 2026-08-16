@@ -59,7 +59,10 @@ export const IMPACT_SITE = {
   height: 14,
   role: 'Residential',
   address: "Jenna Apartments (Warda), Al Warqa'a 1, Al Warqa, Dubai, UAE",
-  plusCode: '5MJP+',
+  // Real Open Location Code (Plus Code) computed for the resolved coordinates
+  // above (25.1857908, 55.4045442) via the standard OLC algorithm — verified
+  // round-trip decode back to 25.18581/55.40456 (within meters of source).
+  plusCode: '7HQQ5CP3+8R',
   postcode: '',
   geocode: { lat: 25.1857908, lon: 55.4045442, source: 'reverse-geocode (resolved, Al Warqa\u2019a 1)' },
   analystContext: { timezone: 'Asia/Dubai (+04:00)', region: 'Dubai Emirate', isoRegion: 'AE-DU' },
