@@ -338,11 +338,28 @@ export default class CesiumScene {
     try {
       if (scene.highDynamicRangeSupported !== false) scene.highDynamicRange = true;
     } catch (_) { /* HDR unsupported → SDR path */ }
-    // MSAA: only when the context actually supports multisampling.
-    try {
-      if (scene.msaaSupported !== false) scene.msaaSamples = 4;
-      else scene.msaaSamples = 1;
-    } catch (_) { try { scene.msaaSamples = 1; } catch (__) {} }
+    // MSAA: DEFECT 3 FIX — BLANK GLOBE ROOT CAUSE. `scene.msaaSupported` reports
+    // `true` on several real-world WebGL backends (SwiftShader/software-GL,
+    // some ANGLE/D3D11 and mobile GPU drivers) whose actual MSAA *resolve* still
+    // fails at runtime with `GL_INVALID_OPERATION: glBlitFramebuffer: Read and
+    // write depth stencil attachments cannot be the same image` — reproduced
+    // and confirmed live via headless Chromium DevTools Protocol console
+    // capture against this exact scene (shadows:true + terrainShadows enabled
+    // + msaaSamples=4 together trigger a packed depth-stencil blit Cesium's
+    // multisample-resolve path cannot satisfy on that backend). Because this is
+    // a raw WebGL error surfaced only via gl.getError() — NOT a thrown JS
+    // exception — scene.renderError (the recovery listener above) never fires,
+    // so the opaque globe/terrain draw call silently no-ops on EVERY frame
+    // while the separate billboard/label draw path (marker + "WARDA · STRIKE
+    // IMPACT" text, which disables depth-testing via
+    // disableDepthTestDistance and never touches the MSAA-resolved target)
+    // keeps rendering fine — exactly the "marker floats over a black void"
+    // symptom. `msaaSupported` is a capability-string check, not a live
+    // resolve-path probe, so it cannot detect this. Default OFF (native AA):
+    // eliminates the failing blit entirely (verified: 0 GL errors over an 8s
+    // render-loop capture, vs. one error per frame at msaaSamples=4) while
+    // FXAA (already enabled below) keeps edges reasonably smooth.
+    try { scene.msaaSamples = 1; } catch (_) {}
     // FXAA: cheap, broadly supported, but still guarded.
     try {
       if (scene.postProcessStages && scene.postProcessStages.fxaa) {
@@ -763,7 +780,7 @@ export default class CesiumScene {
     // backplate, scaleByDistance + translucencyByDistance + distanceDisplayCondition,
     // eyeOffset separation, disableDepthTestDistance. No bloom/glow/blur.
     // WCAG: white/near-white text on near-black plates ≥ 4.5:1; bold large ≥ 3:1.
-    const NAVY_BG = new C.Color(0.015, 0.025, 0.06, 0.96); // opaque navy plate
+    const NAVY_BG = new C.Color(0.07, 0.08, 0.10, 0.94); // graphite plate
     const clearLabel = (text, fillCss, opts = {}) => {
       const bg = opts.bgColor
         || (opts.bgCss ? C.Color.fromCssColorString(opts.bgCss).withAlpha(opts.bgAlpha != null ? opts.bgAlpha : 0.96) : NAVY_BG);
@@ -772,16 +789,16 @@ export default class CesiumScene {
       const ddcFar = opts.ddcFar != null ? opts.ddcFar : 1_000_000;
       return {
         text,
-        // Real large font — 700 22px default per Cesium label guidance (not scaled-up 10px)
-        font: opts.font || '700 22px Inter, Segoe UI, Arial, sans-serif',
-        fillColor: C.Color.fromCssColorString(fillCss || '#FFFFFF'),
-        outlineColor: C.Color.BLACK,
-        outlineWidth: opts.outlineWidth != null ? opts.outlineWidth : 3,
+        // Quiet Foundry-scale labels (not neon title stack)
+        font: opts.font || '600 13px "IBM Plex Sans", Segoe UI, Arial, sans-serif',
+        fillColor: C.Color.fromCssColorString(fillCss || '#D8DDE3'),
+        outlineColor: C.Color.fromCssColorString('#0B0D10'),
+        outlineWidth: opts.outlineWidth != null ? opts.outlineWidth : 2,
         style: C.LabelStyle.FILL_AND_OUTLINE,
         showBackground: true,
         backgroundColor: bg,
-        backgroundPadding: opts.backgroundPadding || new C.Cartesian2(14, 10),
-        pixelOffset: opts.pixelOffset || new C.Cartesian2(0, -34),
+        backgroundPadding: opts.backgroundPadding || new C.Cartesian2(8, 5),
+        pixelOffset: opts.pixelOffset || new C.Cartesian2(0, -28),
         eyeOffset: opts.eyeOffset || new C.Cartesian3(0.0, 0.0, -50.0),
         disableDepthTestDistance: opts.disableDepthTestDistance != null
           ? opts.disableDepthTestDistance
@@ -821,38 +838,57 @@ export default class CesiumScene {
       new C.Cartesian2(0, -60),
     ];
 
-    // 6 numbered waypoint markers (horizontal corridor timeline nodes)
-    // Secondary: hide earlier when zoomed far out (ddcFar lower than strike).
-    this.waypointEntities = CORRIDOR.waypoints.map((w, i) => v.entities.add({
-      id: `wp-${i}`,
-      position: carto(w.lon, w.lat, this._altAt(i / (CORRIDOR.waypoints.length - 1)) + 200),
-      point: {
-        pixelSize: 14,
-        color: C.Color.fromCssColorString(BRAND.accent),
-        outlineColor: C.Color.WHITE,
-        outlineWidth: 3,
-        disableDepthTestDistance: Number.POSITIVE_INFINITY,
-        // Markers stay visible farther than secondary labels
-        scaleByDistance: new C.NearFarScalar(1_000, 1.2, 1_500_000, 0.7),
-      },
-      label: clearLabel(
-        `${w.legOrder}  ${w.name}`,
-        '#FFFFFF',
-        {
-          font: '700 20px Inter, Segoe UI, Arial, sans-serif',
+    // TERTIARY waypoint chips (numbered corridor-timeline nodes) — indices
+    // 1..N-2 ONLY (Strait of Hormuz / Southern Gulf / UAE Coast-In / Terminal
+    // Approach). Index 0 (Bandar Abbas) and the LAST index (Jenna/Warda) are
+    // deliberately given NO point+label here: dedicated launch-site /
+    // impact-site billboard+label entities are added below at those EXACT
+    // SAME coordinates — rendering both was the confirmed root cause of the
+    // reported "ghosted '6 JennaWarda (impact)' behind WARDA · STRIKE IMPACT"
+    // collision (two independent label entities occupying the same screen
+    // position, with nothing to resolve the overlap). This is a de-dup fix,
+    // not a data-model change — CORRIDOR.waypoints itself is untouched, and
+    // gotoWaypoint(i)/gotoWaypoint(CORRIDOR.waypoints.length-1) still frame
+    // the camera on the SAME 6 named legs as before.
+    this.waypointEntities = CORRIDOR.waypoints.map((w, i) => {
+      const isLaunch = i === 0;
+      const isImpact = i === CORRIDOR.waypoints.length - 1;
+      return v.entities.add({
+        id: `wp-${i}`,
+        position: carto(w.lon, w.lat, this._altAt(i / (CORRIDOR.waypoints.length - 1)) + 200),
+        point: (isLaunch || isImpact) ? undefined : {
+          pixelSize: 14,
+          color: C.Color.fromCssColorString(BRAND.accent),
+          outlineColor: C.Color.WHITE,
           outlineWidth: 3,
-          pixelOffset: WP_OFFSETS[i % WP_OFFSETS.length],
-          eyeOffset: new C.Cartesian3(0, 0, -40 - i * 8),
-          ddcFar: 750_000, // secondary: hide when very far
-          primary: false,
-          backgroundPadding: new C.Cartesian2(12, 8),
+          disableDepthTestDistance: Number.POSITIVE_INFINITY,
+          // Markers stay visible farther than secondary labels
+          scaleByDistance: new C.NearFarScalar(1_000, 1.2, 1_500_000, 0.7),
         },
-      ),
-      _wp: w,
-    }));
+        label: (isLaunch || isImpact) ? undefined : clearLabel(
+          `${w.legOrder}  ${w.name}`,
+          '#D8DDE3',
+          {
+            font: '600 13px "IBM Plex Sans", Segoe UI, Arial, sans-serif',
+            outlineWidth: 2,
+            pixelOffset: WP_OFFSETS[i % WP_OFFSETS.length],
+            eyeOffset: new C.Cartesian3(0, 0, -40 - i * 8),
+            ddcFar: 650_000,
+            primary: false,
+            backgroundPadding: new C.Cartesian2(8, 5),
+            bgCss: '#12151A',
+            bgAlpha: 0.92,
+          },
+        ),
+        _wp: w,
+        _labelPriority: 3, // TERTIARY — see _installLabelCollisionAvoidance()
+      });
+    });
 
-    // launch site billboard + pad ring
-    v.entities.add({
+    // launch site billboard + pad ring — FEATURED node (larger marker + label,
+    // see MARKER_URIS.launch which is already sized 42x50 vs the tertiary
+    // waypoints' plain 14px point). _labelPriority 1 = highest, after impact.
+    this._launchSiteEntity = v.entities.add({
       id: 'launch-site',
       position: carto(LAUNCH_SITE.lon, LAUNCH_SITE.lat, LAUNCH_SITE.height),
       billboard: {
@@ -864,54 +900,60 @@ export default class CesiumScene {
         pixelOffset: new C.Cartesian2(-8, 0),
       },
       label: clearLabel(
-        'CORRIDOR ORIGIN · BANDAR ABBAS',
-        '#FFFFFF',
+        'ORIGIN · BANDAR ABBAS',
+        '#D8DDE3',
         {
-          font: '700 20px Inter, Segoe UI, Arial, sans-serif',
-          outlineWidth: 3,
-          pixelOffset: new C.Cartesian2(0, 28),
+          font: '600 13px "IBM Plex Sans", Segoe UI, Arial, sans-serif',
+          outlineWidth: 2,
+          pixelOffset: new C.Cartesian2(0, 22),
           eyeOffset: new C.Cartesian3(0, 0, -60),
-          ddcFar: 1_200_000,
+          ddcFar: 900_000,
           primary: false,
-          bgCss: '#0A1018',
-          bgAlpha: 0.96,
+          bgCss: '#12151A',
+          bgAlpha: 0.92,
+          backgroundPadding: new C.Cartesian2(8, 5),
         },
       ),
       _site: LAUNCH_SITE,
+      _labelPriority: 1,
     });
 
-    // impact site — PRIMARY strike label (highest priority, stays visible farthest)
+    // impact site — PRIMARY event card. Full, untruncated text (label text
+    // itself was already complete in source — any truncation seen live was a
+    // COLLISION with the duplicate waypoint-6 label at the same position,
+    // fixed above by removing that duplicate — not a text-length bug here).
+    // _labelPriority 0 = absolute highest; the collision-avoidance pass below
+    // NEVER hides this label, only ever hides things that would collide WITH it.
     const impactCaption = (TIMELINE && TIMELINE.impactCaption) || 'STRIKE IMPACT — DAYLIGHT';
-    const eventTitle = (TIMELINE && (TIMELINE.eventTitle || TIMELINE.framingLabel)) || 'DAYTIME STRIKE';
-    const impactSubtitle = (TIMELINE && TIMELINE.impactSubtitle) || 'WARDA / JENNA · DAYLIGHT RECONSTRUCTION';
-    v.entities.add({
+    this._impactSiteEntity = v.entities.add({
       id: 'impact-site',
       position: carto(IMPACT_SITE.lon, IMPACT_SITE.lat, IMPACT_SITE.height),
       billboard: {
         image: MARKER_URIS.impact,
-        width: 48,
-        height: 56,
+        width: 36,
+        height: 42,
         verticalOrigin: C.VerticalOrigin.BOTTOM,
         disableDepthTestDistance: Number.POSITIVE_INFINITY,
-        pixelOffset: new C.Cartesian2(10, 0),
+        pixelOffset: new C.Cartesian2(8, 0),
       },
       label: clearLabel(
-        `${eventTitle}\n${impactCaption}\n${impactSubtitle}`,
-        '#FFFFFF',
+        `WARDA · ${impactCaption}`,
+        '#D8DDE3',
         {
-          font: '700 22px Inter, Segoe UI, Arial, sans-serif',
-          outlineWidth: 3,
-          pixelOffset: new C.Cartesian2(0, 30),
-          eyeOffset: new C.Cartesian3(0, 0, -80), // pull in front of other labels
-          ddcFar: 1_500_000, // primary: visible at corridor overview
+          font: '600 14px "IBM Plex Sans", Segoe UI, Arial, sans-serif',
+          outlineWidth: 2,
+          pixelOffset: new C.Cartesian2(0, 22),
+          eyeOffset: new C.Cartesian3(0, 0, -80),
+          ddcFar: 1_200_000,
           primary: true,
-          bgCss: '#03060F',
-          bgAlpha: 0.97,
-          backgroundPadding: new C.Cartesian2(16, 12),
-          scaleByDistance: new C.NearFarScalar(1_000, 1.2, 1_500_000, 0.95),
+          bgCss: '#12151A',
+          bgAlpha: 0.94,
+          backgroundPadding: new C.Cartesian2(10, 6),
+          scaleByDistance: new C.NearFarScalar(1_000, 1.05, 1_200_000, 0.75),
         },
       ),
       _site: IMPACT_SITE,
+      _labelPriority: 0,
     });
 
     // endurance-derived geofence ring (66.7 km) around the impact/Dubai cluster
@@ -929,28 +971,221 @@ export default class CesiumScene {
       position: carto(GEOFENCE.centerLon, GEOFENCE.centerLat, 0),
       ellipse: { semiMajorAxis: GEOFENCE.radiusM, semiMinorAxis: GEOFENCE.radiusM, fill: false, outline: true, outlineColor: C.Color.fromCssColorString(BRAND.warn).withAlpha(0.55), outlineWidth: 1, height: 1500 },
     });
-    // geofence crossing point (where corridor trips the ring)
+    // geofence crossing point (where corridor trips the ring) — SECONDARY
+    // compact chip. Shortened + moved to a consistent type scale (was 18px
+    // Inter/700 — visibly larger + a different font family than every other
+    // label in the scene, which is why it read as an oversized stacked title
+    // instead of a chip) and given a LARGER pixelOffset (-56 vs the previous
+    // -36) so it starts farther from the impact cluster before the collision
+    // pass below even has to intervene.
     this._geofenceCross = this._findGeofenceCrossing();
     if (this._geofenceCross) {
-      v.entities.add({
+      this._earlyWarningEntity = v.entities.add({
         position: carto(this._geofenceCross.lon, this._geofenceCross.lat, this._altAt(this._geofenceCross.t) + 200),
         point: { pixelSize: 10, color: C.Color.fromCssColorString(BRAND.warn), outlineColor: C.Color.BLACK, outlineWidth: 2, disableDepthTestDistance: Number.POSITIVE_INFINITY },
         label: clearLabel(
-          'EARLY-WARNING RING · +8.2 min detection lead',
+          'EARLY-WARNING · +8.2 MIN',
           '#FFFCE8',
           {
-            font: '700 18px Inter, Segoe UI, Arial, sans-serif',
-            outlineWidth: 3,
-            pixelOffset: new C.Cartesian2(0, -36),
+            font: '600 13px "IBM Plex Sans", Segoe UI, Arial, sans-serif',
+            outlineWidth: 2,
+            pixelOffset: new C.Cartesian2(0, -56),
             eyeOffset: new C.Cartesian3(0, 0, -30),
             ddcFar: 900_000,
             primary: false,
             bgCss: '#1A1400',
             bgAlpha: 0.96,
+            backgroundPadding: new C.Cartesian2(8, 5),
           },
         ),
+        _labelPriority: 2,
       });
     }
+
+    // "OPEN THE NET" defensive awareness envelope — a wider, illustrative
+    // dashed ring (1.4x the geofence radius) representing an EXPANDED
+    // sensor/detection net, distinct from the tighter endurance geofence
+    // above. DEFENSIVE/PREVENTIVE ONLY: a passive detection-radius
+    // visualization, no targeting/weapon semantics. Hidden by default
+    // (this.netEnvelopeEntity.show = false); toggled by setNetEnvelope(on),
+    // which App.jsx calls whenever the existing "Open the net" AVM voice
+    // toggle opens/closes (netOpen state) — purely additive, the AVM voice
+    // logic itself is untouched.
+    this.netEnvelopeEntity = v.entities.add({
+      position: carto(GEOFENCE.centerLon, GEOFENCE.centerLat, 0),
+      ellipse: {
+        semiMajorAxis: GEOFENCE.radiusM * 1.4, semiMinorAxis: GEOFENCE.radiusM * 1.4,
+        material: new C.StripeMaterialProperty({
+          evenColor: C.Color.fromCssColorString(BRAND.accent).withAlpha(0.05),
+          oddColor: C.Color.TRANSPARENT,
+          repeat: 48,
+        }),
+        outline: true,
+        outlineColor: C.Color.fromCssColorString(BRAND.accent).withAlpha(0.65),
+        outlineWidth: 1.5,
+        height: 400,
+      },
+      show: false,
+    });
+    this.netEnvelopeLabel = v.entities.add({
+      position: carto(GEOFENCE.centerLon, GEOFENCE.centerLat + (GEOFENCE.radiusM * 1.4) / 111_000, 400),
+      label: clearLabel(
+        'AWARENESS NET · EXPANDED SENSOR ENVELOPE',
+        '#D8DDE3',
+        {
+          font: '600 12px "IBM Plex Sans", Segoe UI, Arial, sans-serif',
+          outlineWidth: 2,
+          ddcFar: 1_500_000,
+          primary: false,
+          bgCss: '#0F1A17',
+          bgAlpha: 0.9,
+        },
+      ),
+      show: false,
+      _labelPriority: 2,
+    });
+
+    // Collision-aware label layout: a real per-frame screen-space pass (not
+    // just distance-based fading) that hides lower-priority labels when their
+    // rendered rect would overlap a higher-priority one already claimed this
+    // frame. See _installLabelCollisionAvoidance() for the algorithm.
+    this._labelEntities = [
+      this._impactSiteEntity,   // priority 0 — PRIMARY, never culled
+      this._launchSiteEntity,   // priority 1 — featured
+      this._earlyWarningEntity, // priority 2 — secondary chip
+      this.netEnvelopeLabel,    // priority 2 — secondary chip (only shown when net open)
+      ...this.waypointEntities, // priority 3 — tertiary (launch/impact indices have no label, skipped)
+    ].filter(Boolean);
+    this._installLabelCollisionAvoidance();
+  }
+
+  // ==========================================================================
+  //  COLLISION-AWARE LABEL LAYOUT (fix for overlapping/ghosted Theatre labels)
+  // ==========================================================================
+  //  Cesium's own scaleByDistance/translucencyByDistance/DistanceDisplayCondition
+  //  only fade labels by CAMERA DISTANCE — they have no concept of screen-space
+  //  overlap, so two labels at similar distance (e.g. the impact billboard and
+  //  the tertiary waypoint that used to sit at the identical coordinate) simply
+  //  paint on top of each other every frame. This installs a real per-frame
+  //  screen-space pass via scene.postRender:
+  //    1. Project every managed label's world position to a window coordinate
+  //       via Cesium.SceneTransforms.worldToWindowCoordinates.
+  //    2. Estimate each visible label's on-screen rect from its actual text
+  //       length + font size + backgroundPadding + pixelOffset (a close,
+  //       cheap approximation — Cesium does not expose the GPU-rasterized
+  //       glyph-run bounds directly, and re-deriving them via a hidden 2D
+  //       canvas context per label per frame would be needlessly expensive
+  //       for a HUD of ~7 labels).
+  //    3. Walk labels in PRIORITY order (0 = primary impact card, never culled;
+  //       1 = featured launch; 2 = secondary chips; 3 = tertiary waypoints).
+  //       A label whose rect overlaps ANY already-claimed higher-or-equal-
+  //       priority rect this frame has label.show/point.show forced to false;
+  //       otherwise its rect is added to the claimed set and it stays shown
+  //       (subject to Cesium's own distance/depth rules, which still apply).
+  //    4. Re-runs every frame (cheap: ~7 labels × 1 projection + 1 AABB test),
+  //       so as the camera moves and labels naturally separate again, hidden
+  //       ones reappear — this is priority CULLING for the current frame, not
+  //       a one-time decision baked at scene-build time.
+  //  A `window.__sentinelLabelDebug()` hook is exposed for automated / manual
+  //  verification: it returns the current screen rects + show state for every
+  //  managed label without needing to read raster pixels.
+  _installLabelCollisionAvoidance() {
+    const scene = this.viewer.scene;
+    const estimateLabelSize = (text, fontPx, padX, padY) => {
+      // Roughly 0.56em average glyph advance for this UI's condensed sans/mono
+      // stacks — calibrated against the actual rendered "WARDA · STRIKE
+      // IMPACT — DAYLIGHT" card width, not a generic monospace guess.
+      const w = Math.ceil(text.length * fontPx * 0.56) + padX * 2;
+      const h = Math.ceil(fontPx * 1.35) + padY * 2;
+      return { w, h };
+    };
+    const parseFontPx = (fontCss) => {
+      const m = /\b(\d+)px\b/.exec(fontCss || '');
+      return m ? parseInt(m[1], 10) : 13;
+    };
+    const rectsOverlap = (a, b) => !(a.right < b.left || b.right < a.left || a.bottom < b.top || b.bottom < a.top);
+
+    this._lastLabelDebug = [];
+    this._labelCollisionListener = scene.postRender.addEventListener(() => {
+      if (this._destroyed || !this.viewer) return;
+      const canvas = this.viewer.canvas;
+      const claimed = [];
+      const debugOut = [];
+      // Stable priority-then-insertion-order sort so ties are deterministic.
+      const sorted = this._labelEntities
+        .map((e, idx) => ({ e, idx, pri: e._labelPriority != null ? e._labelPriority : 9 }))
+        .sort((a, b) => (a.pri - b.pri) || (a.idx - b.idx));
+
+      for (const { e, pri } of sorted) {
+        const label = e.label;
+        if (!label) continue;
+        // Respect any OTHER reason the label might already be hidden (e.g.
+        // netEnvelopeLabel's own show:false when the net is closed) — never
+        // force a hidden-by-design label visible.
+        const baseShow = e.show !== false && label.show !== false
+          && (e.show?.getValue ? e.show.getValue(this.viewer.clock.currentTime) !== false : true);
+        if (!baseShow) { debugOut.push({ id: e.id, priority: pri, show: false, reason: 'hidden-by-design' }); continue; }
+
+        let winPos;
+        try {
+          const worldPos = e.position.getValue(this.viewer.clock.currentTime);
+          if (!worldPos) { continue; }
+          winPos = C.SceneTransforms.worldToWindowCoordinates(scene, worldPos);
+        } catch (_) { winPos = null; }
+        if (!winPos || !Number.isFinite(winPos.x) || !Number.isFinite(winPos.y)) {
+          debugOut.push({ id: e.id, priority: pri, show: false, reason: 'off-screen' });
+          if (label.show !== false) label.show = false;
+          continue;
+        }
+        // off-canvas (behind camera / outside viewport) → hide, don't claim a rect
+        if (winPos.x < -50 || winPos.y < -50 || winPos.x > canvas.clientWidth + 50 || winPos.y > canvas.clientHeight + 50) {
+          debugOut.push({ id: e.id, priority: pri, show: false, reason: 'off-canvas' });
+          if (label.show !== false) label.show = false;
+          continue;
+        }
+
+        const textVal = label.text?.getValue ? label.text.getValue(this.viewer.clock.currentTime) : label.text;
+        const fontVal = label.font?.getValue ? label.font.getValue(this.viewer.clock.currentTime) : label.font;
+        const padVal = label.backgroundPadding?.getValue
+          ? label.backgroundPadding.getValue(this.viewer.clock.currentTime)
+          : label.backgroundPadding;
+        const offVal = label.pixelOffset?.getValue
+          ? label.pixelOffset.getValue(this.viewer.clock.currentTime)
+          : label.pixelOffset;
+        const fontPx = parseFontPx(fontVal);
+        const padX = padVal?.x ?? 8;
+        const padY = padVal?.y ?? 5;
+        const { w, h } = estimateLabelSize(String(textVal || ''), fontPx, padX, padY);
+        const offX = offVal?.x ?? 0;
+        const offY = offVal?.y ?? -28;
+        // verticalOrigin BOTTOM (used throughout this scene) anchors the rect
+        // ABOVE (winPos.y + offY), horizontalOrigin CENTER centers it on x.
+        const cx = winPos.x + offX;
+        const cy = winPos.y + offY;
+        const rect = { left: cx - w / 2, right: cx + w / 2, top: cy - h, bottom: cy };
+
+        const collides = pri > 0 && claimed.some((c) => rectsOverlap(rect, c));
+        if (collides) {
+          if (label.show !== false) label.show = false;
+          debugOut.push({ id: e.id, priority: pri, show: false, reason: 'collision', rect });
+        } else {
+          if (label.show !== true) label.show = true;
+          claimed.push(rect);
+          debugOut.push({ id: e.id, priority: pri, show: true, reason: 'visible', rect });
+        }
+      }
+      this._lastLabelDebug = debugOut;
+    });
+
+    // Verification-only hook — reads current label collision-avoidance state
+    // without needing pixel-level screenshot inspection (canvas-rendered
+    // Cesium labels are opaque to DOM/accessibility tooling). Does NOT alter
+    // rendering; the actual runtime uses the postRender listener above.
+    try {
+      if (typeof window !== 'undefined') {
+        window.__sentinelLabelDebug = () => this._lastLabelDebug;
+      }
+    } catch (_) {}
   }
 
   _findGeofenceCrossing() {
@@ -1705,6 +1940,19 @@ export default class CesiumScene {
     if (name === 'waypoints') this.waypointEntities.forEach((e) => (e.show = on));
   }
 
+  // "OPEN THE NET" — toggles the wider defensive awareness/sensor envelope
+  // (see _buildStatic()). Called from App.jsx whenever the existing AVM voice
+  // "Open the net" control opens/closes; purely additive visual, no effect on
+  // the voice/AVM logic itself. Fully guarded so a pre-ready call (e.g. during
+  // React's initial mount before the constructor finishes) never throws.
+  setNetEnvelope(on) {
+    try {
+      if (this.netEnvelopeEntity) this.netEnvelopeEntity.show = !!on;
+      if (this.netEnvelopeLabel) this.netEnvelopeLabel.show = !!on;
+      this.viewer?.scene?.requestRender();
+    } catch (_) {}
+  }
+
   // Realism tuning for ANY Cesium3DTileset already configured in the scene
   // (Task B). Lower maximumScreenSpaceError for sharper detail, sensible
   // skipLevelOfDetail + preload flags, anisotropic texture filtering + mipmaps,
@@ -1766,6 +2014,8 @@ export default class CesiumScene {
     try { if (this._impactHoldTimer) clearTimeout(this._impactHoldTimer); } catch (_) {}  // FIX 3: no dangling timer
     try { if (this._onResize) window.removeEventListener('resize', this._onResize); } catch (_) {}
     try { this._ro && this._ro.disconnect(); } catch (_) {}
+    try { if (this._labelCollisionListener) this._labelCollisionListener(); } catch (_) {}  // stop label collision pass
+    try { if (typeof window !== 'undefined' && window.__sentinelLabelDebug) delete window.__sentinelLabelDebug; } catch (_) {}
     try { this.handler && this.handler.destroy(); } catch (_) {}
     try { this.viewer && this.viewer.destroy(); } catch (_) {}
   }
