@@ -1,18 +1,24 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
+import {
+  Video, Crosshair, Eye, Map as MapIcon, Plane, Radar, Focus, Navigation,
+  Flame, Radio, Shield, Layers, Mic, MicOff, Play, Pause, RotateCcw,
+  Clock, Building2, FileText, BookOpen, Globe2, Target, Waypoints, Search,
+} from 'lucide-react';
 import CesiumScene from './cesium/CesiumScene.js';
 import { mountShahedInspector } from './three/Shahed136.js';
 import { SHAHED_SPECS } from './utils/geo.js';
 import {
   META, IMPACT_SITE, CORRIDOR_ORIGIN, CORRIDOR, GEOFENCE, STATS, CAMERA_MODES,
-  TIMELINE,
   analyzeThermal, VIIRS_DETECTIONS, INTEL, IMAGERY,
 } from './data/scenario.js';
-import {
-  LOGO, HUD_FRAME, CAM_ICONS, GEOFENCE_RING, THERMAL_ALERT, waypointMarker,
-} from './brand/assets.js';
+import { HUD_FRAME } from './brand/assets.js';
+import ChatPanel from './chat/ChatPanel.jsx';
+import { loadVoiceConfig, saveVoiceConfig } from './utils/voiceConfig.js';
 
-// AIREV | OnDemand wordmark — rendered PURELY as styled text/CSS (no image
-// asset, no AI-generated graphic). Used in the classification banner + footer.
+// Official On Demand lockup — prefer logo_header / logo_dark for dark chrome.
+const OD_LOGO_SRC = `${import.meta.env.BASE_URL || '/'}brand/logo-header.png`;
+const OD_LOGO_FALLBACK = `${import.meta.env.BASE_URL || '/'}brand/od-logo-black.png`;
+
 const AirevWordmark = ({ className }) => (
   <span className={`airev-wordmark ${className || ''}`}>
     <span className="aw-airev">AIREV</span>
@@ -21,14 +27,118 @@ const AirevWordmark = ({ className }) => (
   </span>
 );
 
+const OdLogo = ({ className, height }) => (
+  <img
+    className={className || 'od-logo'}
+    src={OD_LOGO_SRC}
+    alt="On Demand"
+    height={height || 22}
+    draggable={false}
+    onError={(e) => {
+      if (e.currentTarget.src !== OD_LOGO_FALLBACK) e.currentTarget.src = OD_LOGO_FALLBACK;
+    }}
+  />
+);
+
+const TABS = [
+  { id: 'theatre', label: 'Theatre', Icon: Globe2 },
+  { id: 'timeline', label: 'Timeline', Icon: Clock },
+  { id: 'entities', label: 'Entities', Icon: Target },
+  { id: 'briefing', label: 'Briefing', Icon: FileText },
+  { id: 'sources', label: 'Sources', Icon: BookOpen },
+  // OSINT research assistant — defensive/preventive open-source research only.
+  { id: 'chat', label: 'Chat', Icon: Search },
+];
+
 const Svg = ({ markup, className, style }) => (
   <span className={className} style={style} dangerouslySetInnerHTML={{ __html: markup }} />
 );
+
+// Lucide icons for camera modes (crisp 14–16px strokes)
+const CAM_LUCIDE = {
+  overview: MapIcon,
+  chase: Plane,
+  orbital: Navigation,
+  cockpit: Focus,
+  impact: Crosshair,
+  launch: Radar,
+  free: Eye,
+  tactical: Video,
+};
+
+// ---------------------------------------------------------------------------
+// LIVE AVM conversation (PRIMARY voice path)
+// Workflow: 6a7dc588fc1a4aa90e832ec4  ·  UXE Warda Strike AVM Narrator
+// Static MP3 / one-shot TTS briefing is DEMOTED — not the OPEN THE NET path.
+// Mic in (Web Speech API) → /api/avm/* proxy → agent turn → spoken reply out.
+// ---------------------------------------------------------------------------
+const AVM_WORKFLOW_ID = '6a7dc588fc1a4aa90e832ec4';
+// Demoted optional clip only (never auto-played; not OPEN THE NET primary).
+
+async function avmApi(path, body) {
+  const res = await fetch(path, {
+    method: body === undefined ? 'GET' : 'POST',
+    headers: body === undefined ? undefined : { 'Content-Type': 'application/json' },
+    body: body === undefined ? undefined : JSON.stringify(body),
+  });
+  const ct = (res.headers.get('content-type') || '').toLowerCase();
+  let json = null;
+  if (ct.includes('application/json')) {
+    try { json = await res.json(); } catch (_) { json = null; }
+  } else {
+    // SPA rewrite / missing middleware served HTML — treat as a missing route,
+    // never as a successful health payload (that would skip the API-key check).
+    const err = new Error(
+      res.ok
+        ? 'Voice API returned HTML instead of JSON — /api/avm is not mounted on this host.'
+        : `HTTP ${res.status}`,
+    );
+    err.status = res.status;
+    throw err;
+  }
+  if (!res.ok || (json && json.ok === false)) {
+    const msg = (json && (json.error || json.message)) || `HTTP ${res.status}`;
+    const err = new Error(msg);
+    err.status = res.status;
+    err.detail = json;
+    throw err;
+  }
+  return json;
+}
+
+function playRemoteAudio(url, audioEl) {
+  return new Promise((resolve, reject) => {
+    if (!url || !audioEl) {
+      resolve(false);
+      return;
+    }
+    const onEnd = () => { cleanup(); resolve(true); };
+    const onErr = (e) => { cleanup(); reject(e); };
+    const cleanup = () => {
+      audioEl.removeEventListener('ended', onEnd);
+      audioEl.removeEventListener('error', onErr);
+    };
+    audioEl.addEventListener('ended', onEnd);
+    audioEl.addEventListener('error', onErr);
+    audioEl.src = url;
+    audioEl.load();
+    const p = audioEl.play();
+    if (p && typeof p.then === 'function') {
+      p.catch((e) => { cleanup(); reject(e); });
+    }
+  });
+}
 
 export default function App() {
   const cesiumRef = useRef(null);
   const sceneRef = useRef(null);
   const inspectorRef = useRef(null);
+  const audioRef = useRef(null);
+  const recognitionRef = useRef(null);
+  const sessionIdRef = useRef(null);
+  const netOpenRef = useRef(false);
+  const listeningRef = useRef(false);
+  const processingRef = useRef(false);
 
   const [ready, setReady] = useState(false);
   const [playing, setPlaying] = useState(false);
@@ -42,7 +152,13 @@ export default function App() {
   const [clock, setClock] = useState('');                        // live UTC clock for the classification banner
   const [layers, setLayers] = useState({ corridor: true, geofence: true, waypoints: true });
   const [scenarioId, setScenarioId] = useState('baseline_monitor');
-  const [hoverNode, setHoverNode] = useState(null);
+  const [activeTab, setActiveTab] = useState('theatre');
+  // Live AVM net state (primary). voicePlaying kept as alias of net open for CSS.
+  const [netOpen, setNetOpen] = useState(false);
+  const [voicePhase, setVoicePhase] = useState('idle'); // idle|connecting|speaking|listening|thinking|error
+  const [voiceError, setVoiceError] = useState('');
+  const [voiceCaption, setVoiceCaption] = useState('');
+  const [lastHeard, setLastHeard] = useState('');
 
   // Illustrative resilience scenario chips (NOT confirmed intelligence)
   const SCENARIOS = [
@@ -52,23 +168,6 @@ export default function App() {
     { id: 'multi_node_lag', name: 'Multi-node lag', det: 16.8, resp: 57.9, disr: 0.83, rec: 8.9, risk: 0.49 },
   ];
   const scenario = SCENARIOS.find((s) => s.id === scenarioId) || SCENARIOS[0];
-  // Blend illustrative KPIs with live progress so tiles update while the sim runs
-  const ease = progress * progress * (3 - 2 * progress);
-  const kpis = {
-    det: +(5.5 + (scenario.det - 5.5) * ease).toFixed(1),
-    resp: +(12 + (scenario.resp - 12) * ease).toFixed(1),
-    disr: +(0.05 + (scenario.disr - 0.05) * ease).toFixed(2),
-    rec: +(2.0 + (scenario.rec - 2.0) * ease).toFixed(1),
-    risk: +(0.04 + (scenario.risk - 0.04) * ease).toFixed(2),
-  };
-  const riskChip = kpis.risk >= 0.35 ? 'CONTAIN' : kpis.risk >= 0.15 ? 'MONITOR' : 'RESTORE';
-
-  const WATCH_NODES = [
-    { id: 'ORIGIN', label: 'ORIGIN', y: 12, tip: `Corridor origin ${CORRIDOR_ORIGIN.lat}, ${CORRIDOR_ORIGIN.lon}` },
-    { id: 'MWR-APT', label: 'MWR-APT', y: 38, tip: 'Municipal watch node (assumed role) — ILLUSTRATIVE' },
-    { id: 'SWM', label: 'SWM', y: 64, tip: 'Sector warning link (assumed) — ILLUSTRATIVE' },
-    { id: 'SITE', label: 'SITE', y: 90, tip: `${IMPACT_SITE.address} · ${IMPACT_SITE.lat}, ${IMPACT_SITE.lon}` },
-  ];
 
   const thermalReport = analyzeThermal(VIIRS_DETECTIONS);
 
@@ -103,9 +202,14 @@ export default function App() {
       setReady(true);   // never leave the UI stuck behind the boot overlay
     }
 
-    // hide boot screen (always, even on init error)
+    // hide boot screen immediately after mount (always, even on init error).
+    // A long delay left crawlers / first-paint screenshots stuck on
+    // "initializing theatre…" even though the globe was already live.
     const boot = document.getElementById('boot-screen');
-    if (boot) setTimeout(() => boot.classList.add('hidden'), 900);
+    if (boot) {
+      requestAnimationFrame(() => boot.classList.add('hidden'));
+      setTimeout(() => boot.classList.add('hidden'), 280);
+    }
 
     try { if (inspectorRef.current) insp = mountShahedInspector(inspectorRef.current); } catch (_) {}
     return () => {
@@ -113,6 +217,17 @@ export default function App() {
       try { scene && scene.destroy(); } catch (_) {}
     };
   }, []);
+
+  // OPEN THE NET — wide defensive awareness/sensor envelope (illustrative,
+  // detection-only — no targeting/weapon semantics). Purely additive: mirrors
+  // the EXISTING `netOpen` boolean (already flipped by toggleVoiceBriefing /
+  // closeTheNet for the AVM live-voice feature) onto a Cesium visual via
+  // setNetEnvelope(), without touching a single line of the voice/AVM logic
+  // itself. This is what makes the fifth bottom-bar control ("Open the net")
+  // ALSO drive a corridor-envelope visualization, per the task brief.
+  useEffect(() => {
+    sceneRef.current?.setNetEnvelope(netOpen);
+  }, [netOpen]);
 
   // NOTE: There is intentionally NO requestAnimationFrame loop in App. The
   // CesiumScene driver loop is the SINGLE authoritative animation/camera loop;
@@ -124,13 +239,245 @@ export default function App() {
     setPlaying(!!on);
   }, [playing]);
 
+  // ---- Live AVM conversation helpers ------------------------------------
+  const stopRecognition = useCallback(() => {
+    try {
+      const rec = recognitionRef.current;
+      if (rec) {
+        rec.onresult = null;
+        rec.onerror = null;
+        rec.onend = null;
+        try { rec.stop(); } catch (_) {}
+        try { rec.abort(); } catch (_) {}
+      }
+    } catch (_) {}
+    recognitionRef.current = null;
+    listeningRef.current = false;
+  }, []);
+
+  const stopNetAudio = useCallback(() => {
+    try {
+      const el = audioRef.current;
+      if (el) {
+        el.pause();
+        el.removeAttribute('src');
+        el.load();
+      }
+    } catch (_) {}
+  }, []);
+
+  const closeTheNet = useCallback(() => {
+    netOpenRef.current = false;
+    processingRef.current = false;
+    stopRecognition();
+    stopNetAudio();
+    setNetOpen(false);
+    setVoicePhase('idle');
+    setVoiceError('');
+    // keep last captions for after-action review
+  }, [stopRecognition, stopNetAudio]);
+
+  const handleUserUtterance = useCallback(async (text) => {
+    const sessionId = sessionIdRef.current;
+    if (!netOpenRef.current || !sessionId || processingRef.current) return;
+    const cleaned = String(text || '').trim();
+    if (!cleaned) return;
+    processingRef.current = true;
+    listeningRef.current = false;
+    stopRecognition();
+    setLastHeard(cleaned);
+    setVoiceCaption(`YOU: ${cleaned}`);
+    setVoicePhase('thinking');
+    setVoiceError('');
+    try {
+      const turn = await avmApi('/api/avm/turn', { sessionId, text: cleaned });
+      if (!netOpenRef.current) return;
+      const answer = (turn && turn.answer) || '';
+      setVoiceCaption(answer ? `NET: ${answer}` : 'NET: (no spoken reply)');
+      if (turn && turn.audioUrl && audioRef.current && netOpenRef.current) {
+        setVoicePhase('speaking');
+        try {
+          await playRemoteAudio(turn.audioUrl, audioRef.current);
+        } catch (e) {
+          // eslint-disable-next-line no-console
+          console.warn('[App] reply audio play failed', e);
+        }
+      }
+      if (netOpenRef.current) {
+        // resume listening for the next turn
+        // startListening is defined below; call via ref pattern after both exist
+        processingRef.current = false;
+        setVoicePhase('listening');
+        // deferred start to avoid race with audio end
+        setTimeout(() => {
+          if (netOpenRef.current && !processingRef.current) {
+            // eslint-disable-next-line no-use-before-define
+            startListeningRef.current && startListeningRef.current();
+          }
+        }, 250);
+      }
+    } catch (err) {
+      processingRef.current = false;
+      if (!netOpenRef.current) return;
+      setVoicePhase('error');
+      setVoiceError(err?.message || 'Agent turn failed');
+      // try to resume listening so the net stays open
+      setTimeout(() => {
+        if (netOpenRef.current) {
+          setVoicePhase('listening');
+          // eslint-disable-next-line no-use-before-define
+          startListeningRef.current && startListeningRef.current();
+        }
+      }, 800);
+    }
+  }, [stopRecognition]);
+
+  const startListeningRef = useRef(null);
+
+  const startListening = useCallback(() => {
+    if (!netOpenRef.current || processingRef.current) return;
+    const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SR) {
+      setVoiceError('Browser has no SpeechRecognition — type is not available; use Chrome/Edge for mic.');
+      setVoicePhase('error');
+      return;
+    }
+    stopRecognition();
+    let rec;
+    try {
+      rec = new SR();
+    } catch (e) {
+      setVoiceError('Mic recognition unavailable in this browser.');
+      setVoicePhase('error');
+      return;
+    }
+    rec.lang = loadVoiceConfig().preferredLang || 'en-US';
+    rec.continuous = false;
+    rec.interimResults = false;
+    rec.maxAlternatives = 1;
+    rec.onresult = (ev) => {
+      try {
+        const t = ev?.results?.[0]?.[0]?.transcript || '';
+        if (t) handleUserUtterance(t);
+      } catch (_) {}
+    };
+    rec.onerror = (ev) => {
+      const code = ev?.error || 'mic_error';
+      if (!netOpenRef.current) return;
+      if (code === 'no-speech' || code === 'aborted') {
+        // quietly restart while net is open
+        if (!processingRef.current) {
+          setTimeout(() => {
+            if (netOpenRef.current && !processingRef.current) startListeningRef.current && startListeningRef.current();
+          }, 300);
+        }
+        return;
+      }
+      if (code === 'not-allowed' || code === 'service-not-allowed') {
+        setVoiceError('Microphone permission denied — allow mic, then OPEN THE NET again.');
+        setVoicePhase('error');
+        return;
+      }
+      setVoiceError(`Mic: ${code}`);
+      setTimeout(() => {
+        if (netOpenRef.current && !processingRef.current) startListeningRef.current && startListeningRef.current();
+      }, 600);
+    };
+    rec.onend = () => {
+      listeningRef.current = false;
+      // auto-restart while net open and not processing a turn
+      if (netOpenRef.current && !processingRef.current) {
+        setTimeout(() => {
+          if (netOpenRef.current && !processingRef.current) startListeningRef.current && startListeningRef.current();
+        }, 220);
+      }
+    };
+    recognitionRef.current = rec;
+    try {
+      rec.start();
+      listeningRef.current = true;
+      setVoicePhase('listening');
+    } catch (e) {
+      // start() throws if already started — ignore
+    }
+  }, [handleUserUtterance, stopRecognition]);
+
+  startListeningRef.current = startListening;
+
+  // OPEN THE NET — start live two-way AVM conversation (NOT static MP3).
+  const toggleVoiceBriefing = useCallback(async () => {
+    setVoiceError('');
+    if (netOpenRef.current) {
+      closeTheNet();
+      return;
+    }
+    // open the net
+    netOpenRef.current = true;
+    setNetOpen(true);
+    setVoicePhase('connecting');
+    setVoiceCaption('Opening live net with AVM narrator…');
+    setLastHeard('');
+    try {
+      // health first (surfaces missing API key clearly)
+      try {
+        const h = await avmApi('/api/avm/health');
+        if (h && h.hasApiKey === false) {
+          throw new Error('Server missing ON_DEMAND_API_KEY — cannot open live net.');
+        }
+      } catch (e) {
+        if (e?.message?.includes('ON_DEMAND_API_KEY') || e?.message?.includes('/api/avm')) throw e;
+        // health optional if route is still cold-starting
+      }
+      const sess = await avmApi('/api/avm/session', {});
+      if (!netOpenRef.current) return;
+      sessionIdRef.current = sess.sessionId;
+      saveVoiceConfig({
+        lastSessionId: sess.sessionId,
+        lastWorkflowId: sess.workflowId || AVM_WORKFLOW_ID,
+        lastEndpointId: sess.endpointId || null,
+        preferredLang: loadVoiceConfig().preferredLang || 'en-US',
+      });
+      const starter = sess.conversationStarter || 'Live net open. Speak your question.';
+      setVoiceCaption(`NET: ${starter}`);
+      if (sess.starterAudioUrl && audioRef.current) {
+        setVoicePhase('speaking');
+        try {
+          await playRemoteAudio(sess.starterAudioUrl, audioRef.current);
+        } catch (e) {
+          // eslint-disable-next-line no-console
+          console.warn('[App] starter audio play failed', e);
+        }
+      }
+      if (!netOpenRef.current) return;
+      setVoicePhase('listening');
+      startListening();
+    } catch (err) {
+      // eslint-disable-next-line no-console
+      console.warn('[App] open net failed', err);
+      netOpenRef.current = false;
+      setNetOpen(false);
+      setVoicePhase('error');
+      setVoiceError(err?.message || 'Failed to open live AVM net');
+      stopRecognition();
+      stopNetAudio();
+    }
+  }, [closeTheNet, startListening, stopRecognition, stopNetAudio]);
+
+  // cleanup on unmount
+  useEffect(() => () => {
+    netOpenRef.current = false;
+    stopRecognition();
+    stopNetAudio();
+  }, [stopRecognition, stopNetAudio]);
+
   const onReset = useCallback(() => {
     sceneRef.current?.setPlaying(false);
     setPlaying(false);
     const r = sceneRef.current?.setProgress(0);
     setProgress(0);
     if (r) setReadout(r);
-  }, []);
+    closeTheNet();
+  }, [closeTheNet]);
 
   const pickScenario = useCallback((id) => {
     setScenarioId(id);
@@ -196,120 +543,208 @@ export default function App() {
   const wp = CORRIDOR.waypoints;
   const fmt = (n, d = 1) => (n == null ? '—' : Number(n).toFixed(d));
 
+  const theatreActive = activeTab === 'theatre';
+
   return (
     <div className="app">
-      {/* classification-style top banner (MoD presentation grade) */}
-      <div className="classbar" role="banner">
-        <span className="cls-tag">UNCLASSIFIED // DEFENSIVE BRIEFING · PREVENTIVE</span>
-        <span className="cls-mid">
-          <AirevWordmark /> <span className="cls-sys">SENTINEL RESILIENCE · IMP-08</span>
-        </span>
-        <span className="cls-tag cls-right">
+      {/* 40–48px Foundry application bar */}
+      <header className="appbar" role="banner">
+        <div className="brand-lockup">
+          <OdLogo height={22} />
+          <span className="airev-micro">AIREV</span>
+        </div>
+        <div className="title-block">
+          <div className="t1">IMP-08 · SENTINEL</div>
+          <div className="t2">UAE DEFENSIVE COMMAND CENTER · ILLUSTRATIVE</div>
+        </div>
+        <div className="appbar-right">
+          <span className="cls-tag">UNCLASSIFIED // DEFENSIVE</span>
           <span className="cls-live"><span className="cls-dot" />{ready ? 'LIVE' : 'INIT'}</span>
           <span className="cls-clock">{clock}</span>
-        </span>
-      </div>
-
-      {/* full-screen brand HUD frame */}
-      <Svg markup={HUD_FRAME} className="hud-frame" />
-
-      {/* Cesium globe */}
-      <div ref={cesiumRef} className="cesium-host" />
-      {thermal && <div className="thermal-overlay" />}
-
-      {/* Dark-theme corridor watch diagram — v3 high-clarity Southern Gulf timeline */}
-      <div className="corridor-overlay" aria-label="Al Warqa corridor watch nodes — daytime strike">
-        <div className="co-header">
-          <span className="co-header-kicker">{TIMELINE?.eventTitle || TIMELINE?.framingLabel || 'DAYTIME STRIKE'}</span>
-          <span className="co-header-main">3 · SOUTHERN GULF → UAE COAST · TACTICAL CORRIDOR</span>
-          <span className="co-header-sub">TANKER / UAE COAST · WATCH NODES · ILLUSTRATIVE</span>
-          <span className="co-header-day">DEFENSIVE BRIEFING · DAYLIGHT RECONSTRUCTION</span>
-          <span className="co-header-clock">{TIMELINE?.secondaryClockLabel || 'MIDDAY LOCAL · 12:00 GST'}</span>
-        </div>
-        <div className="co-body">
-          <div className="co-amber-band" aria-hidden="true" />
-          <div className="co-route" />
-          <div className="co-scan" />
-          <div className="co-playhead" style={{ top: `${8 + progress * 78}%` }} title="Status" />
-          {/* Yellow status marker (center-right of timeline) */}
-          <span className="co-status-dot" style={{ top: `${8 + progress * 78}%` }} aria-hidden="true" />
-          {WATCH_NODES.map((n) => (
-            <button
-              key={n.id}
-              type="button"
-              className={`co-node ${hoverNode === n.id ? 'on' : ''} ${n.id === 'SITE' ? 'co-node-primary' : ''}`}
-              style={{ top: `${n.y}%` }}
-              title={n.tip}
-              onMouseEnter={() => setHoverNode(n.id)}
-              onMouseLeave={() => setHoverNode(null)}
-              onClick={() => setHoverNode(n.id)}
-            >
-              <span className="co-dot" />
-              <span className={`co-plate ${n.id === 'MWR-APT' ? 'slate' : n.id === 'SWM' || n.id === 'SITE' ? 'mint' : ''}`}>
-                {n.id === 'MWR-APT' ? 'MWR-APT NODE' : n.id === 'SWM' ? 'SWM LINK' : n.id === 'SITE' ? 'WARDA / JENNA · SITE' : 'ORIGIN'}
-              </span>
-            </button>
-          ))}
-          {/* Magenta strike-impact caption — DAYLIGHT rename (not night clock) */}
-          <div className="co-strike-caption" role="note">
-            <span className="co-strike-title">{TIMELINE?.eventTitle || 'DAYTIME STRIKE'}</span>
-            <span className="co-strike-impact">{TIMELINE?.impactCaption || 'STRIKE IMPACT — DAYLIGHT'}</span>
-          </div>
-        </div>
-        {hoverNode && (
-          <div className="co-tip">{WATCH_NODES.find((n) => n.id === hoverNode)?.tip}</div>
-        )}
-      </div>
-
-      {/* Illustrative KPI plates — update while sim runs */}
-      <div className="kpi-strip" role="region" aria-label="Illustrative resilience metrics">
-        {[
-          { t: 'DETECTION TIME', v: kpis.det, u: 'min' },
-          { t: 'RESPONSE TIME', v: kpis.resp, u: 'min' },
-          { t: 'DISRUPTION', v: kpis.disr, u: '' },
-          { t: 'RECOVERY', v: kpis.rec, u: 'h' },
-          { t: 'RESIDUAL RISK', v: kpis.risk, u: '' },
-        ].map((m) => (
-          <div key={m.t} className="kpi-card">
-            <div className="kpi-t">{m.t}</div>
-            <div className="kpi-v">{m.v}<span className="kpi-u">{m.u}</span></div>
-          </div>
-        ))}
-        <div className={`kpi-chip st-${riskChip.toLowerCase()}`}>{riskChip}</div>
-      </div>
-
-      {/* top brand bar */}
-      <header className="topbar">
-        <Svg markup={LOGO} className="logo" />
-        <div className="title-block">
-          <div className="t1">IMP-08 · UAE DEFENSIVE COMMAND CENTER · RESILIENCE THEATRE</div>
-          <div className="t2">Early-warning · infrastructure dependency · recovery readiness · ILLUSTRATIVE corridor awareness</div>
-        </div>
-        <div className="badge">
-          <span className="dot" /> {ready ? 'LIVE' : 'INIT'}
         </div>
       </header>
 
-      {/* left: camera modes + waypoints */}
+      {/* Tab strip — Theatre default; others chrome-only placeholders */}
+      <nav className="tabstrip" role="tablist" aria-label="Workstation views">
+        {TABS.map((t) => {
+          const Icon = t.Icon;
+          return (
+            <button
+              key={t.id}
+              type="button"
+              role="tab"
+              aria-selected={activeTab === t.id}
+              className={`tab-btn ${activeTab === t.id ? 'on' : ''}`}
+              onClick={() => setActiveTab(t.id)}
+            >
+              <span className="tab-ico"><Icon size={12} strokeWidth={1.75} /></span>
+              {t.label}
+            </button>
+          );
+        })}
+      </nav>
+
+      {/* 48px monochrome left object rail — maps existing handlers */}
+      <aside className="object-rail" aria-label="Object rail">
+        <div className="or-group">
+          {CAMERA_MODES.slice(0, 4).map((m) => {
+            const Icon = CAM_LUCIDE[m.icon] || CAM_LUCIDE[m.id] || Eye;
+            return (
+              <button
+                key={m.id}
+                type="button"
+                className={`or-btn ${camMode === m.id ? 'on' : ''}`}
+                onClick={() => pickCam(m.id)}
+                title={m.hint || m.name}
+              >
+                <Icon size={16} strokeWidth={1.6} />
+                <span className="or-tip">{m.name}</span>
+              </button>
+            );
+          })}
+        </div>
+        <div className="or-sep" />
+        <div className="or-group">
+          <button type="button" className={`or-btn ${camMode === 'impact' ? 'on' : ''}`} onClick={() => pickCam('impact')} title="Protected site">
+            <Building2 size={16} strokeWidth={1.6} />
+            <span className="or-tip">Protected site</span>
+          </button>
+          <button type="button" className={`or-btn ${thermal ? 'on' : ''}`} onClick={toggleThermal} title="Thermal / IR">
+            <Flame size={16} strokeWidth={1.6} />
+            <span className="or-tip">Thermal / IR</span>
+          </button>
+          <button type="button" className={`or-btn ${layers.corridor ? 'on' : ''}`} onClick={() => toggleLayer('corridor')} title="Corridor layer">
+            <Waypoints size={16} strokeWidth={1.6} />
+            <span className="or-tip">Corridor</span>
+          </button>
+          <button type="button" className={`or-btn ${layers.geofence ? 'on' : ''}`} onClick={() => toggleLayer('geofence')} title="Geofence ring">
+            <Radar size={16} strokeWidth={1.6} />
+            <span className="or-tip">Geofence</span>
+          </button>
+          <button type="button" className={`or-btn ${layers.waypoints ? 'on' : ''}`} onClick={() => toggleLayer('waypoints')} title="Waypoints">
+            <Navigation size={16} strokeWidth={1.6} />
+            <span className="or-tip">Waypoints</span>
+          </button>
+        </div>
+        <div className="or-sep" />
+        <div className="or-group">
+          <button type="button" className={`or-btn ${imageryMode === 'dark' ? 'on' : ''}`} onClick={() => pickImagery(imageryMode === 'dark' ? 'satellite' : 'dark')} title="Basemap">
+            <Layers size={16} strokeWidth={1.6} />
+            <span className="or-tip">Basemap</span>
+          </button>
+          <button type="button" className={`or-btn ${netOpen ? 'on' : ''}`} onClick={toggleVoiceBriefing} title="Open the net">
+            {netOpen ? <MicOff size={16} strokeWidth={1.6} /> : <Mic size={16} strokeWidth={1.6} />}
+            <span className="or-tip">{netOpen ? 'Close net' : 'Open the net'}</span>
+          </button>
+        </div>
+      </aside>
+
+      {/* quiet frame overlay */}
+      <Svg markup={HUD_FRAME} className="hud-frame" />
+
+      {/* Cesium globe — always mounted so scene state is preserved across tabs.
+          THE LIVE INTERACTIVE 3D/WebGL SURFACE — the ONLY Theatre visual, per
+          explicit instruction. A prior turn added a static <img> backdrop
+          ("theatre-plate-host") sitting at z-index:10 in front of this host
+          (which had no explicit z-index, i.e. stacking order 0) — that
+          silently covered AND intercepted all pointer input to the Cesium
+          canvas, which is why Run awareness / drag-to-rotate appeared dead
+          even though every control was (and still is) correctly wired to a
+          real CesiumScene method (setPlaying/setProgress/setLayer). Removed
+          entirely; z-index is now set explicitly on .cesium-host in
+          styles.css so this can never regress silently again. Real imagery:
+          ESRI World Imagery / Carto Dark Matter (both live, key-free) — see
+          CesiumScene.js _addBaseImagery(); MSAA is kept OFF
+          (scene.msaaSamples = 1, from the earlier glBlitFramebuffer fix). */}
+      <div ref={cesiumRef} className="cesium-host" style={{ visibility: theatreActive ? 'visible' : 'hidden' }} />
+      {thermal && theatreActive && <div className="thermal-overlay" />}
+
+      {/* Chat tab — OSINT research assistant. Own full-bleed pane (not the narrow
+          left-rail placeholder pattern below) so the message stream + composer
+          have room to breathe. Defensive/preventive OSINT research only. */}
+      {activeTab === 'chat' && (
+        <div
+          className="chat-tab-host"
+          style={{
+            position: 'absolute',
+            top: 'calc(var(--appbar-h) + var(--tab-h) + var(--chrome-gap))',
+            left: 'calc(var(--obj-rail-w) + var(--chrome-gap))',
+            right: 'var(--chrome-gap)',
+            bottom: 52,
+            zIndex: 50,
+          }}
+        >
+          <ChatPanel />
+        </div>
+      )}
+
+      {/* Non-theatre chrome panes (placeholders; no logic change) */}
+      {!theatreActive && activeTab !== 'chat' && (
+        <aside className="left-rail" style={{ left: 'calc(var(--obj-rail-w) + var(--chrome-gap))', right: 'var(--chrome-gap)', width: 'auto' }}>
+          <div className="tab-pane panel">
+            {activeTab === 'timeline' && (
+              <>
+                <h3>Timeline · illustrative</h3>
+                <p>Playback transport remains on the bottom bar. Use Run awareness / scrub to walk launch → impact. Figures are reconstructed planning sketches.</p>
+                <div className="kv"><span>Progress</span><b>{Math.round(progress * 100)}%</b></div>
+                <div className="kv"><span>Phase</span><b>{readout?.phase || 'Launch'}</b></div>
+                <div className="kv"><span>ETA</span><b>{fmt(readout?.etaMin)} min</b></div>
+              </>
+            )}
+            {activeTab === 'entities' && (
+              <>
+                <h3>Entities · airframe &amp; site</h3>
+                <p>Live entities remain on the globe. This pane surfaces the protected site and airframe designation only.</p>
+                <div className="kv"><span>Site</span><b>{IMPACT_SITE.short || IMPACT_SITE.name || 'Al Warqa'}</b></div>
+                <div className="kv"><span>Airframe</span><b>{SHAHED_SPECS.designation}</b></div>
+                <div className="kv"><span>Corridor origin</span><b>{CORRIDOR_ORIGIN.lat.toFixed(4)}, {CORRIDOR_ORIGIN.lon.toFixed(4)}</b></div>
+              </>
+            )}
+            {activeTab === 'briefing' && (
+              <>
+                <h3>Briefing · defensive resilience</h3>
+                <p>UXE Security Solutions IMP-08 theatre. Early-warning, infrastructure dependency, recovery readiness. Southern Gulf side card removed — brief from globe + command chrome only. Open the net for live AVM narration.</p>
+                <div className="kv"><span>Scenario</span><b>{scenario.name}</b></div>
+                <div className="kv"><span>Classification</span><b>UNCLASSIFIED // DEFENSIVE</b></div>
+              </>
+            )}
+            {activeTab === 'sources' && (
+              <>
+                <h3>Sources · open / illustrative</h3>
+                <p>Imagery: ESRI World Imagery + World Terrain (key-free). Thermal: VIIRS FRP clusters. Specs cite open literature. KPI chips are planning sketches — not confirmed intelligence.</p>
+                <div className="kv"><span>Basemap</span><b>{imageryMode === 'dark' ? 'Carto Dark' : 'ESRI World Imagery'}</b></div>
+                <div className="kv"><span>Ion token</span><b className="ok-chip">NOT REQUIRED</b></div>
+                <div className="muted small src-line">Sources: {(SHAHED_SPECS.cite || []).join(', ') || 'open literature'}.</div>
+              </>
+            )}
+          </div>
+        </aside>
+      )}
+
+      {/* left: camera modes + waypoints — Theatre tab only */}
+      {theatreActive && (
       <aside className="left-rail">
         <div className="panel">
-          <div className="panel-h">CAMERA MODES</div>
+          <div className="panel-h"><Video size={14} className="ph-ico" strokeWidth={1.75} /> Camera modes</div>
           <div className="cam-grid">
-            {CAMERA_MODES.map((m) => (
-              <button key={m.id} className={`cam-btn ${camMode === m.id ? 'on' : ''}`} title={m.hint} onClick={() => pickCam(m.id)}>
-                <Svg markup={CAM_ICONS[m.icon]} className="cam-ico" />
-                <span>{m.name}</span>
-              </button>
-            ))}
+            {CAMERA_MODES.map((m) => {
+              const Icon = CAM_LUCIDE[m.icon] || CAM_LUCIDE[m.id] || Eye;
+              return (
+                <button key={m.id} className={`cam-btn ${camMode === m.id ? 'on' : ''}`} title={m.hint} onClick={() => pickCam(m.id)}>
+                  <span className="cam-ico"><Icon size={14} strokeWidth={1.75} /></span>
+                  <span>{m.name}</span>
+                </button>
+              );
+            })}
           </div>
         </div>
 
         <div className="panel">
-          <div className="panel-h">CORRIDOR NAV · WATCH STOPS</div>
+          <div className="panel-h"><Navigation size={14} className="ph-ico" strokeWidth={1.75} /> Corridor nav</div>
           <div className="wp-list">
             {wp.map((w, i) => (
               <button key={w.id} className={`wp-row ${activeWp === i ? 'on' : ''}`} onClick={() => goWp(i)}>
-                <Svg markup={waypointMarker(w.legOrder, activeWp === i)} className="wp-pin" />
+                <span className="wp-pin"><span className="wp-num">{w.legOrder}</span></span>
                 <div className="wp-meta">
                   <div className="wp-name">{w.name}</div>
                   <div className="wp-phase">{w.phase} · {w.lat.toFixed(3)}, {w.lon.toFixed(3)}</div>
@@ -320,7 +755,7 @@ export default function App() {
         </div>
 
         <div className="panel">
-          <div className="panel-h">RESILIENCE SCENARIOS · ILLUSTRATIVE</div>
+          <div className="panel-h"><Shield size={14} className="ph-ico" strokeWidth={1.75} /> Scenarios · illustrative</div>
           <div className="scenario-chips">
             {SCENARIOS.map((s) => (
               <button
@@ -344,13 +779,15 @@ export default function App() {
           </div>
         </div>
       </aside>
+      )}
 
-      {/* right: impact + telemetry + geofence + thermal + intel + imagery + ion */}
+      {/* right: impact + telemetry + geofence + thermal + intel + imagery — Theatre only */}
+      {theatreActive && (
       <aside className="right-rail">
         <div className="panel">
-          <div className="panel-h">PROTECTED SITE · AL WARQA</div>
+          <div className="panel-h"><Crosshair size={14} className="ph-ico" strokeWidth={1.75} /> Protected site · Al Warqa</div>
           <img className="hero-img" src={IMAGERY.droneHero} alt="Al Warqa infrastructure context — 3D satellite capture" />
-          <div className="context-headline">AL WARQA, DUBAI — INFRASTRUCTURE CONTEXT (3D SATELLITE)</div>
+          <div className="context-headline">Al Warqa, Dubai — infrastructure context</div>
           <div className="hero-strip">
             {IMAGERY.heroVariations.map((src, i) => (
               <figure key={i} className="hero-thumb">
@@ -369,7 +806,7 @@ export default function App() {
         </div>
 
         <div className="panel">
-          <div className="panel-h">LIVE TELEMETRY · AWARENESS</div>
+          <div className="panel-h"><Radio size={14} className="ph-ico" strokeWidth={1.75} /> Telemetry</div>
           <div className="kv"><span>Phase</span><b>{readout?.phase || 'Launch'}</b></div>
           <div className="kv"><span>Leg</span><b>{readout?.legFrom} → {readout?.legTo}</b></div>
           <div className="kv"><span>Altitude</span><b>{fmt((readout?.altM || 0) / 1000, 2)} km</b></div>
@@ -379,14 +816,14 @@ export default function App() {
           <div className="kv"><span>Dive angle</span><b className={readout?.divePitchDeg > 5 ? 'alert' : ''}>{fmt(readout?.divePitchDeg, 1)}°</b></div>
           <div className="kv"><span>ETA</span><b>{fmt(readout?.etaMin)} min</b></div>
           <div className="inspector" ref={inspectorRef}>
-            <div className="insp-cap">AIRFRAME INSPECTOR · AWARENESS TRACK</div>
+            <div className="insp-cap">Airframe inspector</div>
           </div>
         </div>
 
         <div className="panel">
-          <div className="panel-h">ENDURANCE GEOFENCE</div>
+          <div className="panel-h"><Shield size={14} className="ph-ico" strokeWidth={1.75} /> Endurance geofence</div>
           <div className="geo-row">
-            <Svg markup={GEOFENCE_RING} className="geo-ring" />
+            <span className="geo-ring"><Radar size={28} strokeWidth={1.5} /></span>
             <div>
               <div className="big">{GEOFENCE.radiusKm} km</div>
               <div className="sub">endurance-derived detection ring</div>
@@ -397,10 +834,10 @@ export default function App() {
         </div>
 
         <div className="panel">
-          <div className="panel-h">THERMAL / IR · VIIRS</div>
+          <div className="panel-h"><Flame size={14} className="ph-ico" strokeWidth={1.75} /> Thermal / IR · VIIRS</div>
           <button className={`wide-btn ${thermal ? 'on' : ''}`} onClick={toggleThermal}>
-            <Svg markup={THERMAL_ALERT} className="ta-ico" />
-            {thermal ? 'THERMAL MODE: ON' : 'ENABLE THERMAL MODE'}
+            <span className="ta-ico"><Flame size={14} strokeWidth={1.75} /></span>
+            {thermal ? 'Thermal mode: on' : 'Enable thermal mode'}
           </button>
           <div className="kv"><span>Detections</span><b>{thermalReport.total}</b></div>
           <div className="kv"><span>Flagged</span><b className="alert">{thermalReport.flagged} suspicious</b></div>
@@ -410,7 +847,7 @@ export default function App() {
         </div>
 
         <div className="panel">
-          <div className="panel-h">SHAHED-136 · REAL SPECS (SOURCED)</div>
+          <div className="panel-h"><Plane size={14} className="ph-ico" strokeWidth={1.75} /> Shahed-136 · specs</div>
           <div className="kv"><span>Designation</span><b>{SHAHED_SPECS.designation}</b></div>
           <div className="kv"><span>Cruise speed</span><b>{SHAHED_SPECS.cruiseSpeedKmh}</b></div>
           <div className="kv"><span>Range</span><b>{SHAHED_SPECS.rangeKm}</b></div>
@@ -425,13 +862,13 @@ export default function App() {
         </div>
 
         <div className="panel">
-          <div className="panel-h">TERMINAL APPROACH · AL WARQA</div>
+          <div className="panel-h"><MapIcon size={14} className="ph-ico" strokeWidth={1.75} /> Terminal approach</div>
           <img className="overlay-img" src={IMAGERY.backdrop.dubai3d} alt="Dubai 3D photorealistic corridor capture" />
           <div className="muted small">Real 3D photorealistic capture over the Dubai corridor. Physics-modelled ballistic terminal dive (~-62°) converges on Jenna Apartments (Warda), Al Warqa (25.1858, 55.4045).</div>
         </div>
 
         <div className="panel">
-          <div className="panel-h">MAP LAYERS · LIVE / NO-KEY</div>
+          <div className="panel-h"><Layers size={14} className="ph-ico" strokeWidth={1.75} /> Map layers</div>
           <div className="seg">
             <button className={`seg-btn ${imageryMode === 'satellite' ? 'on' : ''}`} onClick={() => pickImagery('satellite')}>
               SATELLITE
@@ -446,6 +883,10 @@ export default function App() {
           <div className="muted small">Live, key-free satellite &amp; terrain streamed at the venue. Toggle a tactical dark basemap for low-light briefing. No Cesium ion / Google credentials.</div>
         </div>
       </aside>
+      )}
+
+      {/* Live AVM reply playback element — src set dynamically; NOT the static MP3 */}
+      <audio ref={audioRef} preload="none" />
 
       {/* bottom transport */}
       <footer className="transport">
@@ -454,11 +895,30 @@ export default function App() {
             <button key={l} className={`chip ${layers[l] ? 'on' : ''}`} onClick={() => toggleLayer(l)}>{l}</button>
           ))}
         </div>
-        <button className="play" onClick={togglePlay}>{playing ? '❚❚ PAUSE' : '▶ RUN AWARENESS'}</button>
-        <button className="reset-btn" type="button" onClick={onReset}>↺ RESET</button>
+        <button
+          className={`voice-brief ${netOpen ? 'on' : ''} phase-${voicePhase}`}
+          type="button"
+          onClick={toggleVoiceBriefing}
+          title={`Live two-way AVM · workflow ${AVM_WORKFLOW_ID} · DeepSeek V4 Flash (mic in / spoken replies). Not TTS/STS/MP3 primary.`}
+        >
+          {netOpen
+            ? <><MicOff size={13} strokeWidth={1.75} /> {voicePhase === 'listening' ? 'CLOSE · LISTENING' : voicePhase === 'thinking' ? 'CLOSE · THINKING' : voicePhase === 'speaking' ? 'CLOSE · SPEAKING' : voicePhase === 'connecting' ? 'CLOSE · CONNECTING' : 'CLOSE THE NET'}</>
+            : <><Mic size={13} strokeWidth={1.75} /> OPEN THE NET</>}
+        </button>
+        <button className="play" onClick={togglePlay}>{playing ? <><Pause size={13} strokeWidth={1.75} /> Pause</> : <><Play size={13} strokeWidth={1.75} /> Run awareness</>}</button>
+        <button className="reset-btn" type="button" onClick={onReset}><RotateCcw size={12} strokeWidth={1.75} /> Reset</button>
         <input className="scrub" type="range" min="0" max="1" step="0.001" value={progress} onChange={onScrub} />
         <div className="prog">{Math.round(progress * 100)}%</div>
         <div className="scenario-tag">{scenario.name}</div>
+        {voiceCaption && (
+          <div className={`voice-caption phase-${voicePhase}`} role="status" title={voiceCaption}>
+            {voiceCaption}
+          </div>
+        )}
+        {lastHeard && netOpen && (
+          <div className="voice-heard" title={lastHeard}>heard: {lastHeard}</div>
+        )}
+        {voiceError && <div className="voice-err" role="status">{voiceError}</div>}
         <div className="stats">
           <span>{STATS.owaDrones} OWA</span><span>{STATS.ballisticMissiles} BM</span><span>{STATS.durationDays}-day</span>
         </div>
@@ -488,7 +948,8 @@ export default function App() {
       )}
 
       <div className="footer-brand">
-        <AirevWordmark /> <span className="fb-sub">Defensive Resilience · Sentinel Command Center · ILLUSTRATIVE KPIs</span>
+        <OdLogo className="fb-logo" height={14} />
+        <span className="fb-sub">Defensive resilience · sentinel · ILLUSTRATIVE</span>
       </div>
     </div>
   );
