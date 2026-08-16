@@ -9,7 +9,7 @@ import { mountShahedInspector } from './three/Shahed136.js';
 import { SHAHED_SPECS } from './utils/geo.js';
 import {
   META, IMPACT_SITE, CORRIDOR_ORIGIN, CORRIDOR, GEOFENCE, STATS, CAMERA_MODES,
-  analyzeThermal, VIIRS_DETECTIONS, INTEL, IMAGERY,
+  analyzeThermal, VIIRS_DETECTIONS, INTEL, IMAGERY, LAUNCH_SITE,
 } from './data/scenario.js';
 import { HUD_FRAME } from './brand/assets.js';
 import ChatPanel from './chat/ChatPanel.jsx';
@@ -606,7 +606,84 @@ export default function App() {
       {/* quiet frame overlay */}
       <Svg markup={HUD_FRAME} className="hud-frame" />
 
-      {/* Cesium globe — always mounted so scene state is preserved across tabs */}
+      {/* THEATRE STRIKE PLATE — real-imagery backdrop (fix for the blank black
+          Theatre canvas). Sits BEHIND the Cesium host below, so the canvas is
+          NEVER empty regardless of the WebGL/Cesium init state: this is a plain
+          <img>, unrelated to any WebGL context. Uses the existing local Al Warqa
+          3D capture (public/imagery/alwarqa-3d.png) — the same real, previously
+          committed satellite/photoreal still already used in the right-rail
+          "Protected site" hero card — as the primary reconstruction plate.
+          Cesium (MSAA-fixed, see CesiumScene.js) still renders on top as the
+          optional interactive globe/underlay per the task brief. */}
+      {theatreActive && (
+        <div className="theatre-plate-host" aria-hidden="true">
+          <img className="theatre-plate-img" src={IMAGERY.captures.alwarqa3d.file} alt="" />
+          <div className="theatre-plate-scrim" />
+
+          {/* 6 hit nodes: launch (featured) -> 4 light corridor ticks -> impact
+              (featured, existing mint marker language). Positions are stylized
+              screen-space placements along an illustrative left-to-right corridor
+              sweep across the still plate (this is a single reconstruction
+              image, not a georeferenced map, so nodes are NOT lon/lat-projected)
+              — order and phase/name text are pulled directly from the existing
+              CORRIDOR.waypoints data model (6 waypoints, legOrder 1-6). */}
+          <svg className="theatre-corridor-svg" viewBox="0 0 100 100" preserveAspectRatio="none">
+            <polyline
+              points="7,24 21,21 37,25 53,27 67,29 75,31"
+              fill="none"
+              stroke="#9FE8C8"
+              strokeOpacity="0.4"
+              strokeWidth="0.35"
+              strokeDasharray="1.2 1.4"
+              vectorEffect="non-scaling-stroke"
+            />
+          </svg>
+          <div className="theatre-nodes">
+            {CORRIDOR.waypoints.map((w, i) => {
+              const POS = [
+                { x: 7, y: 24 }, { x: 21, y: 21 }, { x: 37, y: 25 },
+                { x: 53, y: 27 }, { x: 67, y: 29 }, { x: 75, y: 31 },
+              ][i] || { x: 50, y: 30 };
+              const isLaunch = i === 0;
+              const isImpact = i === CORRIDOR.waypoints.length - 1;
+              const kind = isLaunch ? 'launch' : isImpact ? 'impact' : 'tick';
+              return (
+                <div
+                  key={w.id}
+                  className={`theatre-node theatre-node--${kind}`}
+                  style={{ left: `${POS.x}%`, top: `${POS.y}%` }}
+                >
+                  {isImpact && <span className="tn-ring" />}
+                  <span className="tn-dot" />
+                  {isLaunch && <span className="tn-label">{LAUNCH_SITE.short}</span>}
+                  {isImpact && <span className="tn-label">WARDA · STRIKE IMPACT — DAYLIGHT</span>}
+                  {kind === 'tick' && <span className="tn-label">{w.legOrder} · {w.phase}</span>}
+                </div>
+              );
+            })}
+          </div>
+
+          {/* Featured hero cards — launch (staging) + impact (daylight Warda
+              site), using the existing real 3D captures, prominent (not tiny
+              icons) per the task brief. */}
+          <div className="theatre-hero-row">
+            <figure className="theatre-hero-card theatre-hero-card--launch">
+              <img src={IMAGERY.backdrop.launchArea} alt="Bandar Abbas launch / corridor-origin staging area" />
+              <figcaption className="theatre-hero-card__cap">Launch · corridor origin<b>{LAUNCH_SITE.name}</b></figcaption>
+            </figure>
+            <figure className="theatre-hero-card theatre-hero-card--impact">
+              <img src={IMAGERY.captures.alwarqa3d.file} alt="Jenna Apartments (Warda) impact site — daylight reconstruction" />
+              <figcaption className="theatre-hero-card__cap">Impact · daylight<b>Jenna / Warda, Al Warqa</b></figcaption>
+            </figure>
+          </div>
+        </div>
+      )}
+
+      {/* Cesium globe — always mounted so scene state is preserved across tabs.
+          Optional interactive underlay on TOP of the strike plate above (per
+          task brief: "keep it as an optional underlay but ALWAYS show this
+          plate so the canvas is never blank"). transparent background lets the
+          plate read through until/unless the globe's own tiles finish loading. */}
       <div ref={cesiumRef} className="cesium-host" style={{ visibility: theatreActive ? 'visible' : 'hidden' }} />
       {thermal && theatreActive && <div className="thermal-overlay" />}
 

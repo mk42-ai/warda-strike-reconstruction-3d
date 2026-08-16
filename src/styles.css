@@ -90,6 +90,122 @@ body {
 .cesium-host .cesium-viewer-bottom,
 .cesium-host .cesium-widget-credits { display: none !important; }
 
+/* ==========================================================================
+   THEATRE STRIKE PLATE — real-imagery backdrop for the main Theatre canvas.
+   Sits BEHIND the Cesium globe (z-index 10 vs cesium-host's own internal
+   canvas), so the Theatre view is NEVER a blank black void regardless of
+   Cesium/WebGL init state — the plate is a plain <img>, unrelated to any
+   WebGL context. Cesium (once its own MSAA fix is live) renders on TOP as an
+   optional interactive globe underlay; the plate provides the guaranteed
+   populated look requested for the reconstruction view.
+   ========================================================================== */
+.theatre-plate-host {
+  position: absolute;
+  top: calc(var(--appbar-h) + var(--tab-h));
+  left: var(--obj-rail-w);
+  right: 0;
+  bottom: 0;
+  z-index: 10;
+  overflow: hidden;
+  background: var(--bg-0);
+}
+.theatre-plate-img {
+  position: absolute; inset: 0;
+  width: 100%; height: 100%;
+  object-fit: cover; object-position: center 62%;
+  filter: saturate(0.86) brightness(0.62) contrast(1.08);
+}
+.theatre-plate-scrim {
+  position: absolute; inset: 0;
+  background:
+    linear-gradient(180deg, rgba(6,7,9,0.55) 0%, rgba(6,7,9,0.14) 26%, rgba(6,7,9,0.10) 60%, rgba(6,7,9,0.62) 100%),
+    radial-gradient(ellipse at 50% 46%, rgba(6,7,9,0.05) 0%, rgba(6,7,9,0.42) 78%);
+}
+
+/* -- 6-node corridor overlay (HTML/CSS, always visible — independent of any
+      WebGL layer beneath it) ------------------------------------------------ */
+.theatre-nodes {
+  position: absolute; inset: 0; z-index: 20; pointer-events: none;
+}
+.theatre-node { position: absolute; transform: translate(-50%, -50%); display: flex; flex-direction: column; align-items: center; }
+/* corridor connector line between nodes, drawn once as a full-bleed SVG */
+.theatre-corridor-svg { position: absolute; inset: 0; width: 100%; height: 100%; }
+
+/* Nodes 2-5: light telemetry ticks only — small dim marks, faint labels */
+.theatre-node--tick .tn-dot {
+  width: 7px; height: 7px; border-radius: 50%;
+  background: var(--ink-mute); border: 1px solid rgba(212, 217, 224, 0.35);
+  box-shadow: 0 0 4px rgba(212, 217, 224, 0.18);
+}
+.theatre-node--tick .tn-label {
+  margin-top: 4px; font-family: var(--mono); font-size: 8.5px; letter-spacing: .3px;
+  color: var(--ink-mute); opacity: .78; white-space: nowrap;
+  text-shadow: 0 1px 2px rgba(0,0,0,.8);
+}
+
+/* Node 1 (launch) — featured: larger marker + label, warm amber accent */
+.theatre-node--launch .tn-dot {
+  width: 15px; height: 15px; border-radius: 50%;
+  background: radial-gradient(circle at 35% 30%, #ffcf7a, var(--amber) 70%);
+  border: 2px solid #fff; box-shadow: 0 0 0 4px rgba(168,148,92,0.22), 0 0 10px rgba(168,148,92,0.5);
+}
+.theatre-node--launch .tn-label {
+  margin-top: 6px; font-family: var(--sans); font-size: 10.5px; font-weight: 700;
+  letter-spacing: .4px; text-transform: uppercase; color: var(--ink);
+  background: rgba(10,12,15,0.86); border: 1px solid var(--panel-bd-strong);
+  border-radius: var(--radius); padding: 3px 8px; white-space: nowrap;
+}
+
+/* Node 6 (impact) — featured: mint/teal circular marker (existing brand
+   language: --accent / status-live green family), WARDA · STRIKE IMPACT label */
+.theatre-node--impact .tn-ring {
+  position: absolute; width: 34px; height: 34px; border-radius: 50%;
+  border: 1.5px solid rgba(90, 154, 114, 0.55);
+  animation: theatre-impact-pulse 2.6s ease-out infinite;
+}
+.theatre-node--impact .tn-dot {
+  width: 16px; height: 16px; border-radius: 50%;
+  background: radial-gradient(circle at 35% 30%, #eafff2, var(--status-live) 65%);
+  border: 2px solid #fff; box-shadow: 0 0 0 4px rgba(90,154,114,0.22), 0 0 12px rgba(90,154,114,0.55);
+}
+.theatre-node--impact .tn-label {
+  margin-top: 6px; font-family: var(--sans); font-size: 11px; font-weight: 700;
+  letter-spacing: .5px; text-transform: uppercase; color: var(--ink);
+  background: rgba(10,12,15,0.9); border: 1px solid var(--panel-bd-strong);
+  border-radius: var(--radius); padding: 4px 9px; white-space: nowrap;
+}
+@keyframes theatre-impact-pulse {
+  0% { transform: scale(0.55); opacity: 0.85; }
+  100% { transform: scale(1.7); opacity: 0; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .theatre-node--impact .tn-ring { animation: none; opacity: 0.5; }
+}
+
+/* -- Launch / Impact hero cards (prominent, not tiny icons) --------------- */
+.theatre-hero-row {
+  position: absolute; left: 12px; bottom: 14px; z-index: 25;
+  display: flex; gap: 8px; pointer-events: none;
+}
+.theatre-hero-card {
+  width: 168px; border-radius: var(--radius); overflow: hidden;
+  background: var(--panel-bg-2); border: 1px solid var(--panel-bd-strong);
+  box-shadow: 0 6px 18px rgba(0,0,0,.45);
+}
+.theatre-hero-card img { display: block; width: 100%; height: 92px; object-fit: cover; }
+.theatre-hero-card__cap {
+  padding: 5px 7px 6px;
+  font-family: var(--sans); font-size: 9px; font-weight: 700; letter-spacing: .4px;
+  text-transform: uppercase; color: var(--ink-dim);
+}
+.theatre-hero-card__cap b { display: block; color: var(--ink); font-size: 10px; margin-top: 1px; }
+.theatre-hero-card--launch .theatre-hero-card__cap { border-top: 2px solid var(--amber); }
+.theatre-hero-card--impact .theatre-hero-card__cap { border-top: 2px solid var(--status-live); }
+
+@media (max-width: 900px) {
+  .theatre-hero-row { display: none; }  /* keep the narrow mobile canvas uncluttered */
+}
+
 .hud-frame { position: absolute; inset: 0; pointer-events: none; z-index: 40; opacity: .14; }
 .hud-frame svg { width: 100%; height: 100%; display: block; }
 
