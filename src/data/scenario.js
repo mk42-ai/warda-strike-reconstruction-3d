@@ -313,9 +313,24 @@ export const IMAGERY = {
   // locally under /imagery (no client-side Cesium/Google key, no runtime tile
   // network call). Captures: Al Warqa impact site (2D + 3D), Dubai overview
   // (2D + 3D), Bandar Abbas launch area (3D), Gulf-corridor midpoint (3D).
-  droneHero: assetUrl('imagery/alwarqa-3d.png'),                 // HERO = Al Warqa 3D photorealistic impact site (vbAUhtiHcB)
-  heroVariations: [assetUrl('imagery/alwarqa-2d.png'), assetUrl('imagery/dubai-3d.png'), assetUrl('imagery/alwarqa-3d.png')],
-  heroLabels: ['Top-down 2D (impact)', 'Dubai 3D corridor', 'Terminal approach'],
+  //
+  // Protected Site · Al Warqa panel: committed repo-local stills under
+  // /assets/al-warqa/ (Planet-derived hero + generated + recovered fallbacks).
+  // NEVER point the panel at expiring Azure blob URLs at runtime.
+  droneHero: assetUrl('assets/al-warqa/al-warqa-infrastructure-3d-satellite.png'),
+  droneHeroFallback: assetUrl('assets/al-warqa/al-warqa-infrastructure-3d-satellite-generated.png'),
+  droneHeroRecovered: assetUrl('assets/al-warqa/alwarqa-3d-recovered.png'),
+  heroVariations: [
+    assetUrl('assets/al-warqa/shahed-136-top-down-2d.png'),
+    assetUrl('assets/al-warqa/shahed-136-dubai-3d-corridor.png'),
+    assetUrl('assets/al-warqa/shahed-136-terminal-approach.png'),
+  ],
+  heroVariationFallbacks: [
+    assetUrl('assets/al-warqa/dubai-2d-recovered.png'),
+    assetUrl('assets/al-warqa/al-warqa-infrastructure-3d-satellite-generated.png'),
+    assetUrl('assets/al-warqa/alwarqa-3d-recovered.png'),
+  ],
+  heroLabels: ['Shahed-136 Top-down 2D', 'Shahed-136 Dubai 3D corridor', 'Shahed-136 Terminal approach'],
   // Backdrop / ground-overlay / skybox panels along the Bandar Abbas → Al Warqa corridor
   backdrop: {
     groundOverlay: assetUrl('imagery/dubai-2d.png'),             // Dubai overview 2D satellite ground texture near impact (eCI3Mv3Ziv)

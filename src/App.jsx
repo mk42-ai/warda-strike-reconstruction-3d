@@ -840,12 +840,36 @@ export default function App() {
       <aside className="right-rail">
         <div className="panel">
           <div className="panel-h"><Crosshair size={14} className="ph-ico" strokeWidth={1.75} /> Protected site · Al Warqa</div>
-          <img className="hero-img" src={IMAGERY.droneHero} alt="Al Warqa infrastructure context — 3D satellite capture" onError={(e) => { e.currentTarget.onerror = null; e.currentTarget.src = IMAGERY.heroVariations[0] || IMAGERY.droneHero; }} />
+          <img
+            className="hero-img"
+            src={IMAGERY.droneHero}
+            alt="Al Warqa infrastructure context — 3D satellite capture"
+            data-panel="al-warqa-hero"
+            onError={(e) => {
+              const el = e.currentTarget;
+              const next = el.dataset.fallbackStep === '1'
+                ? IMAGERY.droneHeroRecovered
+                : IMAGERY.droneHeroFallback;
+              el.dataset.fallbackStep = el.dataset.fallbackStep === '1' ? '2' : '1';
+              if (el.dataset.fallbackStep === '2') el.onerror = null;
+              el.src = next;
+            }}
+          />
           <div className="context-headline">Al Warqa, Dubai — infrastructure context</div>
           <div className="hero-strip">
             {IMAGERY.heroVariations.map((src, i) => (
               <figure key={i} className="hero-thumb">
-                <img src={src} alt={`${IMAGERY.heroLabels[i]} — illustrative reconstruction capture`} loading="lazy" onError={(e) => { e.currentTarget.style.opacity = '0.25'; }} />
+                <img
+                  src={src}
+                  alt={`${IMAGERY.heroLabels[i]} — illustrative reconstruction capture`}
+                  loading="lazy"
+                  data-panel={`al-warqa-thumb-${i}`}
+                  onError={(e) => {
+                    const el = e.currentTarget;
+                    el.onerror = null;
+                    el.src = IMAGERY.heroVariationFallbacks[i] || IMAGERY.droneHeroRecovered;
+                  }}
+                />
                 <figcaption>{IMAGERY.heroLabels[i]}</figcaption>
               </figure>
             ))}
