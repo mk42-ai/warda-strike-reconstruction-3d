@@ -117,6 +117,40 @@ export function mediaLiveProxyPlugin() {
             return;
           }
 
+          if (req.method === 'GET' && (u.pathname === '/api/media/proxy' || u.pathname === '/api/media/proxy/')) {
+            const target = u.searchParams.get('url');
+            if (!target) return send(res, 400, { ok: false, error: 'url_required' });
+            let parsed;
+            try { parsed = new URL(target); } catch { return send(res, 400, { ok: false, error: 'bad_url' }); }
+            if (!/^https?:$/i.test(parsed.protocol)) return send(res, 400, { ok: false, error: 'bad_protocol' });
+            const lib = parsed.protocol === 'http:' ? http : https;
+            const up = lib.request(
+              {
+                protocol: parsed.protocol,
+                hostname: parsed.hostname,
+                port: parsed.port || (parsed.protocol === 'http:' ? 80 : 443),
+                path: parsed.pathname + parsed.search,
+                method: 'GET',
+                headers: { Accept: 'image/*,*/*', 'User-Agent': 'warda-sentinel-media-proxy' },
+                timeout: 30000,
+              },
+              (resp) => {
+                res.statusCode = resp.statusCode || 200;
+                const ct = resp.headers['content-type'] || 'application/octet-stream';
+                res.setHeader('Content-Type', ct);
+                res.setHeader('Cache-Control', 'no-store');
+                res.setHeader('Access-Control-Allow-Origin', '*');
+                resp.pipe(res);
+              },
+            );
+            up.on('error', (err) => {
+              if (!res.headersSent) send(res, 502, { ok: false, error: String(err?.message || err) });
+            });
+            up.on('timeout', () => up.destroy(new Error('upstream_timeout')));
+            up.end();
+            return;
+          }
+
           if (req.method === 'GET' && (u.pathname === '/api/media/health' || u.pathname === '/api/media/health/')) {
             return send(res, 200, {
               ok: true,

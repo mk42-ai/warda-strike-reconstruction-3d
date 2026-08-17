@@ -693,8 +693,14 @@ export default class CesiumScene {
   _addDetailPatch(file, lonC, latC, halfDeg, alpha) {
     try {
       const rect = C.Rectangle.fromDegrees(lonC - halfDeg, latC - halfDeg, lonC + halfDeg, latC + halfDeg);
+      let href = file;
+      try {
+        if (typeof window !== 'undefined' && window.location && file && !/^https?:\/\//i.test(file) && !file.startsWith('data:')) {
+          href = new URL(file, window.location.origin).href;
+        }
+      } catch (_) { href = file; }
       const layer = C.ImageryLayer.fromProviderAsync(
-        C.SingleTileImageryProvider.fromUrl(file, { rectangle: rect, tileWidth: 256, tileHeight: 256 }),
+        C.SingleTileImageryProvider.fromUrl(href, { rectangle: rect, tileWidth: 256, tileHeight: 256 }),
         {}
       );
       if (alpha != null) layer.alpha = alpha;
@@ -924,7 +930,7 @@ export default class CesiumScene {
     // fixed above by removing that duplicate — not a text-length bug here).
     // _labelPriority 0 = absolute highest; the collision-avoidance pass below
     // NEVER hides this label, only ever hides things that would collide WITH it.
-    const impactCaption = (TIMELINE && TIMELINE.impactCaption) || 'STRIKE IMPACT — DAYLIGHT';
+    const impactCaption = (TIMELINE && TIMELINE.impactCaption) || 'PROTECTED SITE — ILLUSTRATIVE';
     this._impactSiteEntity = v.entities.add({
       id: 'impact-site',
       position: carto(IMPACT_SITE.lon, IMPACT_SITE.lat, IMPACT_SITE.height),
@@ -1235,7 +1241,9 @@ export default class CesiumScene {
       position: positionCb,
       orientation: orientationCb,
       model: {
-        uri: `${import.meta.env.BASE_URL || '/'}shahed136.glb`,
+        uri: (typeof window !== 'undefined' && window.location)
+          ? new URL(`${import.meta.env.BASE_URL || '/'}shahed136.glb`, window.location.origin).href
+          : `${import.meta.env.BASE_URL || '/'}shahed136.glb`,
         minimumPixelSize: 64,        // always ≥64px even from corridor distance
         maximumScale: 2000,
         scale: 12,                   // prominent but not unrealistic up close
@@ -1565,9 +1573,15 @@ export default class CesiumScene {
     // (passed as `image` only when the PNG is unavailable) so the blast never
     // disappears. Paths are BASE_URL-relative so they resolve on any deploy root.
     const base = (import.meta.env.BASE_URL || '/');
-    const fireImg  = `${base}explosion-fireball.png`;
-    const smokeImg = `${base}explosion-smoke.png`;
-    const debrisImg = `${base}explosion-debris.png`;
+    const abs = (p) => {
+      try {
+        if (typeof window !== 'undefined' && window.location) return new URL(p, window.location.origin).href;
+      } catch (_) { /* relative fallback */ }
+      return p;
+    };
+    const fireImg  = abs(`${base}explosion-fireball.png`);
+    const smokeImg = abs(`${base}explosion-smoke.png`);
+    const debrisImg = abs(`${base}explosion-debris.png`);
     const fireFallback = radialSprite('rgba(255,244,190,1)', 'rgba(255,122,24,0.9)');
     const smokeFallback = radialSprite('rgba(90,90,90,0.9)', 'rgba(40,40,40,0.6)');
     const debrisFallback = radialSprite('rgba(60,40,24,1)', 'rgba(20,14,8,0.7)');

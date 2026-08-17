@@ -298,7 +298,15 @@ export const INTEL = {
 const ASSET_BASE = (typeof import.meta !== 'undefined' && import.meta.env && import.meta.env.BASE_URL)
   ? import.meta.env.BASE_URL
   : '/';
-const assetUrl = (p) => `${ASSET_BASE}${String(p).replace(/^\//, '')}`;
+// Absolute URL so Cesium workers / SingleTileImageryProvider do not resolve
+// local captures against CESIUM_BASE_URL (/cesium/) and 404.
+const assetUrl = (p) => {
+  const rel = `${ASSET_BASE}${String(p).replace(/^\//, '')}`;
+  if (typeof window !== 'undefined' && window.location && window.location.origin) {
+    try { return new URL(rel, window.location.origin).href; } catch { /* fall through */ }
+  }
+  return rel;
+};
 
 export const IMAGERY = {
   // REAL server-side captured satellite / 3D-photorealistic tiles, bundled
@@ -362,10 +370,10 @@ export const TIMELINE = {
   dayIso: '2025-06-21T08:00:00Z',
   framing: 'daytime',
   // Headline rename (v3): DAYTIME STRIKE primary, DAYLIGHT impact caption.
-  eventTitle: 'DAYTIME STRIKE',
-  framingLabel: 'DAYTIME STRIKE',
-  impactCaption: 'STRIKE IMPACT — DAYLIGHT',
-  impactSubtitle: 'WARDA / JENNA · DAYLIGHT RECONSTRUCTION',
+  eventTitle: 'DAYTIME RECONSTRUCTION',
+  framingLabel: 'DAYTIME RECONSTRUCTION',
+  impactCaption: 'PROTECTED SITE — ILLUSTRATIVE',
+  impactSubtitle: 'WARDA / JENNA · DAYLIGHT RECONSTRUCTION · NOT CONFIRMED INTEL',
   // Smaller secondary clock (optional operational reference — not the headline).
   secondaryClockLabel: 'MIDDAY LOCAL · 12:00 GST',
   // Locked presentation clock — Cesium must not animate into night.
