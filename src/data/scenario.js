@@ -298,14 +298,20 @@ export const INTEL = {
 const ASSET_BASE = (typeof import.meta !== 'undefined' && import.meta.env && import.meta.env.BASE_URL)
   ? import.meta.env.BASE_URL
   : '/';
-// Absolute URL so Cesium workers / SingleTileImageryProvider do not resolve
-// local captures against CESIUM_BASE_URL (/cesium/) and 404.
-const assetUrl = (p) => {
+// Cache-bust so a recycled sandbox / stale CDN cannot keep serving a 410'd
+// or empty previous plate. Bump when the committed stills change.
+const ASSET_REV = '20260817c';
+// Panel <img> srcs stay ROOT-RELATIVE so they never pin a dead sb-*.vercel.run
+// origin. Cesium SingleTileImageryProvider still needs an absolute URL
+// (workers resolve against CESIUM_BASE_URL=/cesium/).
+const assetUrl = (p, { absolute = false } = {}) => {
   const rel = `${ASSET_BASE}${String(p).replace(/^\//, '')}`;
+  const stamped = rel.includes('?') ? `${rel}&v=${ASSET_REV}` : `${rel}?v=${ASSET_REV}`;
+  if (!absolute) return stamped;
   if (typeof window !== 'undefined' && window.location && window.location.origin) {
-    try { return new URL(rel, window.location.origin).href; } catch { /* fall through */ }
+    try { return new URL(stamped, window.location.origin).href; } catch { /* fall through */ }
   }
-  return rel;
+  return stamped;
 };
 
 export const IMAGERY = {
@@ -317,18 +323,18 @@ export const IMAGERY = {
   // Protected Site · Al Warqa panel: committed repo-local stills under
   // /assets/al-warqa/ (Planet-derived hero + generated + recovered fallbacks).
   // NEVER point the panel at expiring Azure blob URLs at runtime.
-  droneHero: assetUrl('assets/al-warqa/al-warqa-infrastructure-3d-satellite.png'),
-  droneHeroFallback: assetUrl('assets/al-warqa/al-warqa-infrastructure-3d-satellite-generated.png'),
+  droneHero: assetUrl('assets/al-warqa/hero-al-warqa-3d.png'),
+  droneHeroFallback: assetUrl('assets/al-warqa/al-warqa-infrastructure-3d-satellite.png'),
   droneHeroRecovered: assetUrl('assets/al-warqa/alwarqa-3d-recovered.png'),
   heroVariations: [
+    assetUrl('assets/al-warqa/shahed-136-topdown.png'),
+    assetUrl('assets/al-warqa/shahed-136-dubai-corridor.png'),
+    assetUrl('assets/al-warqa/shahed-136-terminal.png'),
+  ],
+  heroVariationFallbacks: [
     assetUrl('assets/al-warqa/shahed-136-top-down-2d.png'),
     assetUrl('assets/al-warqa/shahed-136-dubai-3d-corridor.png'),
     assetUrl('assets/al-warqa/shahed-136-terminal-approach.png'),
-  ],
-  heroVariationFallbacks: [
-    assetUrl('assets/al-warqa/dubai-2d-recovered.png'),
-    assetUrl('assets/al-warqa/al-warqa-infrastructure-3d-satellite-generated.png'),
-    assetUrl('assets/al-warqa/alwarqa-3d-recovered.png'),
   ],
   heroLabels: ['Shahed-136 Top-down 2D', 'Shahed-136 Dubai 3D corridor', 'Shahed-136 Terminal approach'],
   // Backdrop / ground-overlay / skybox panels along the Bandar Abbas → Al Warqa corridor
@@ -339,12 +345,12 @@ export const IMAGERY = {
     corridorMid: assetUrl('imagery/gulf-midpoint-3d.png'),        // Gulf-corridor midpoint 3D (GCRxQH98Bm)
   },
   captures: {
-    alwarqa2d: { file: assetUrl('imagery/alwarqa-2d.png'), lat: 25.1858, lon: 55.4045, kind: '2D satellite (impact)' },
-    alwarqa3d: { file: assetUrl('imagery/alwarqa-3d.png'), lat: 25.1858, lon: 55.4045, kind: '3D photorealistic (impact)' },
-    dubai2d: { file: assetUrl('imagery/dubai-2d.png'), lat: 25.2048, lon: 55.2708, kind: '2D satellite (overview)' },
-    dubai3d: { file: assetUrl('imagery/dubai-3d.png'), lat: 25.2048, lon: 55.2708, kind: '3D photorealistic (overview)' },
-    bandarAbbas3d: { file: assetUrl('imagery/bandar-abbas-3d.png'), lat: 27.1842, lon: 56.2893, kind: '3D (launch area)' },
-    gulfMid3d: { file: assetUrl('imagery/gulf-midpoint-3d.png'), lat: 26.185, lon: 55.8469, kind: '3D (corridor midpoint)' },
+    alwarqa2d: { file: assetUrl('imagery/alwarqa-2d.png', { absolute: true }), lat: 25.1858, lon: 55.4045, kind: '2D satellite (impact)' },
+    alwarqa3d: { file: assetUrl('imagery/alwarqa-3d.png', { absolute: true }), lat: 25.1858, lon: 55.4045, kind: '3D photorealistic (impact)' },
+    dubai2d: { file: assetUrl('imagery/dubai-2d.png', { absolute: true }), lat: 25.2048, lon: 55.2708, kind: '2D satellite (overview)' },
+    dubai3d: { file: assetUrl('imagery/dubai-3d.png', { absolute: true }), lat: 25.2048, lon: 55.2708, kind: '3D photorealistic (overview)' },
+    bandarAbbas3d: { file: assetUrl('imagery/bandar-abbas-3d.png', { absolute: true }), lat: 27.1842, lon: 56.2893, kind: '3D (launch area)' },
+    gulfMid3d: { file: assetUrl('imagery/gulf-midpoint-3d.png', { absolute: true }), lat: 26.185, lon: 55.8469, kind: '3D (corridor midpoint)' },
   },
   note: 'Server-side captured tiles — fully offline, no client-side token or external tile request at runtime.',
 };

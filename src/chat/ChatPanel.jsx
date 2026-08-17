@@ -550,7 +550,7 @@ export default function ChatPanel() {
     if (health && health.hasApiKey === false) {
       setMessages((m) => [...m, { id: `u-${Date.now()}`, role: 'user', text: query }, {
         id: `e-${Date.now()}`, role: 'assistant', error: true,
-        text: 'OnDemand API key is not configured on this deployment (ON_DEMAND_API_KEY / VITE_ONDEMAND_API_KEY). Set it as an environment variable to enable live OSINT research.',
+        text: 'Live OSINT research is paused on this preview. The rest of the theatre stays usable — open Theatre for the Al Warqa reconstruction.',
       }]);
       setText('');
       return;
@@ -661,9 +661,8 @@ export default function ChatPanel() {
         <div className="chat-key-banner">
           <Info size={13} strokeWidth={1.9} />
           <span>
-            Live research is disabled — the server has no <code>ON_DEMAND_API_KEY</code> configured.
-            Set it as an environment variable (server-side, or <code>VITE_ONDEMAND_API_KEY</code> for a
-            direct-browser deployment) to enable this tab.
+            Live OSINT research is paused on this preview. Theatre, telemetry, and
+            the Al Warqa stills remain usable. No operator action is required here.
           </span>
         </div>
       )}
