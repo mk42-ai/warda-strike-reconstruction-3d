@@ -139,13 +139,30 @@ function splitUsernameLine(raw) {
 // ---------------------------------------------------------------------------
 const IMG_URL_RE = /(?:!\[[^\]]*\]\()?(https?:\/\/[^\s)"']+\.(?:png|jpe?g|gif|webp|svg)(?:\?[^\s)"']*)?)\)?/gi;
 
+/** Same-origin rewrite for signed Azure / OnDemand media so <img> is not CORS/SAS-blocked. */
+export function proxiedMediaUrl(url) {
+  if (!url) return url;
+  if (typeof url === 'string' && url.startsWith('blob:')) return url;
+  try {
+    const origin = typeof window !== 'undefined' ? window.location.origin : 'http://local';
+    const u = new URL(url, origin);
+    if (typeof window !== 'undefined' && u.origin === window.location.origin) return url;
+    if (/blob\.core\.windows\.net|on-demand\.io|airevprod|fbcdn|cdninstagram|scontent/i.test(u.hostname)) {
+      return `/api/media/proxy?url=${encodeURIComponent(url)}`;
+    }
+    return url;
+  } catch {
+    return url;
+  }
+}
+
 export function extractImageUrls(text) {
   if (!text) return [];
   const out = new Set();
   let m;
   IMG_URL_RE.lastIndex = 0;
   while ((m = IMG_URL_RE.exec(text))) out.add(m[1]);
-  return [...out];
+  return [...out].map(proxiedMediaUrl);
 }
 
 export function fileNameFromUrl(url) {

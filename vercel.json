@@ -23,7 +23,7 @@
   "rewrites": [
     { "source": "/api/(.*)", "destination": "/api/$1" },
     {
-      "source": "/((?!api/|brand/|imagery/|cesium/|assets/|explosion-|shahed136).*)",
+      "source": "/((?!api/|brand/|imagery/|cesium/|assets/|explosion-|shahed136|src/|node_modules/|@).*)",
       "destination": "/index.html"
     }
   ]

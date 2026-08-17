@@ -569,7 +569,12 @@ body {
 .hero-img, .overlay-img {
   width: 100%; aspect-ratio: 3 / 2; object-fit: cover;
   border-radius: var(--radius); border: 1px solid var(--panel-bd);
-  margin-bottom: 4px; display: block; background: var(--bg-0);
+  margin-bottom: 4px; display: block;
+  background: #1a2420;
+  min-height: 110px;
+}
+.hero-thumb img {
+  background: #1a2420;
 }
 .addr-label {
   font-size: 10px; font-weight: 500; color: var(--ink);

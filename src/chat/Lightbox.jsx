@@ -93,7 +93,7 @@ export default function ImageLightbox({ urls, index, findInfo, onClose, onNav })
             </button>
           )}
           <figure className="osint-lightbox__figure">
-            <img src={url} alt="Expanded evidence" />
+            <img src={url} alt="Expanded evidence — illustrative, not confirmed intelligence" referrerPolicy="no-referrer" onError={(e) => { e.currentTarget.alt = 'Image unavailable (expired or blocked)'; }} />
             <figcaption>{index + 1} / {urls.length} · illustrative research aid — verify before treating as confirmed</figcaption>
           </figure>
           {hasMultiple && (
