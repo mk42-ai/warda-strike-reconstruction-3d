@@ -293,6 +293,43 @@ export function avmLiveProxyPlugin() {
             });
           }
 
+          // Same-origin audio proxy so signed TTS URLs survive CORS / SAS expiry
+          // after a sandbox preview hide/restore. Defensive reconstruction only.
+          if (req.method === 'GET' && (url === '/api/avm/audio' || url.startsWith('/api/avm/audio?'))) {
+            const u = new URL(url, 'http://internal');
+            const target = u.searchParams.get('url');
+            if (!target) return send(res, 400, { ok: false, error: 'url_required' });
+            let parsed;
+            try { parsed = new URL(target); } catch { return send(res, 400, { ok: false, error: 'bad_url' }); }
+            if (!/^https?:$/i.test(parsed.protocol)) return send(res, 400, { ok: false, error: 'bad_protocol' });
+            const lib = parsed.protocol === 'http:' ? http : https;
+            const up = lib.request(
+              {
+                protocol: parsed.protocol,
+                hostname: parsed.hostname,
+                port: parsed.port || (parsed.protocol === 'http:' ? 80 : 443),
+                path: parsed.pathname + parsed.search,
+                method: 'GET',
+                headers: { Accept: 'audio/*,*/*', 'User-Agent': 'warda-sentinel-avm-audio' },
+                timeout: 30000,
+              },
+              (resp) => {
+                res.statusCode = resp.statusCode || 200;
+                const ct = resp.headers['content-type'] || 'audio/mpeg';
+                res.setHeader('Content-Type', ct);
+                res.setHeader('Cache-Control', 'no-store');
+                res.setHeader('Access-Control-Allow-Origin', '*');
+                resp.pipe(res);
+              },
+            );
+            up.on('error', (err) => {
+              if (!res.headersSent) send(res, 502, { ok: false, error: String(err?.message || err) });
+            });
+            up.on('timeout', () => up.destroy(new Error('upstream_timeout')));
+            up.end();
+            return;
+          }
+
           if (req.method === 'POST' && (url === '/api/avm/speak' || url.startsWith('/api/avm/speak?'))) {
             const body = await readBody(req);
             const t = await ttsSpeak(body.text || '');

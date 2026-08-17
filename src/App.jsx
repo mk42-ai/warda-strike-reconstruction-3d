@@ -13,7 +13,11 @@ import {
 } from './data/scenario.js';
 import { HUD_FRAME } from './brand/assets.js';
 import ChatPanel from './chat/ChatPanel.jsx';
-import { loadVoiceConfig, saveVoiceConfig } from './utils/voiceConfig.js';
+import {
+  loadVoiceConfig, saveVoiceConfig,
+  loadTheatreCheckpoint, saveTheatreCheckpoint,
+  unlockPlayback, proxiedAudioUrl, speakLocal, cancelLocalSpeech,
+} from './utils/voiceConfig.js';
 
 // Official On Demand lockup — prefer logo_header / logo_dark for dark chrome.
 const OD_LOGO_SRC = `${import.meta.env.BASE_URL || '/'}brand/logo-header.png`;
@@ -112,6 +116,7 @@ function playRemoteAudio(url, audioEl) {
       resolve(false);
       return;
     }
+    const src = proxiedAudioUrl(url);
     const onEnd = () => { cleanup(); resolve(true); };
     const onErr = (e) => { cleanup(); reject(e); };
     const cleanup = () => {
@@ -120,7 +125,8 @@ function playRemoteAudio(url, audioEl) {
     };
     audioEl.addEventListener('ended', onEnd);
     audioEl.addEventListener('error', onErr);
-    audioEl.src = url;
+    try { audioEl.crossOrigin = 'anonymous'; audioEl.setAttribute('playsinline', 'true'); } catch (_) {}
+    audioEl.src = src;
     audioEl.load();
     const p = audioEl.play();
     if (p && typeof p.then === 'function') {
@@ -140,19 +146,20 @@ export default function App() {
   const listeningRef = useRef(false);
   const processingRef = useRef(false);
 
+  const _ckpt = (() => { try { return loadTheatreCheckpoint(); } catch { return {}; } })();
   const [ready, setReady] = useState(false);
   const [playing, setPlaying] = useState(false);
   const [progress, setProgress] = useState(0);
-  const [camMode, setCamMode] = useState('launch');
-  const [thermal, setThermal] = useState(false);
+  const [camMode, setCamMode] = useState(_ckpt.camMode || 'launch');
+  const [thermal, setThermal] = useState(!!_ckpt.thermal);
   const [activeWp, setActiveWp] = useState(0);
   const [readout, setReadout] = useState(null);
   const [picked, setPicked] = useState(null);
-  const [imageryMode, setImageryMode] = useState('satellite');   // 'satellite' (ESRI) | 'dark' (Carto)
+  const [imageryMode, setImageryMode] = useState(_ckpt.imageryMode || 'satellite');   // 'satellite' (ESRI) | 'dark' (Carto)
   const [clock, setClock] = useState('');                        // live UTC clock for the classification banner
-  const [layers, setLayers] = useState({ corridor: true, geofence: true, waypoints: true });
-  const [scenarioId, setScenarioId] = useState('baseline_monitor');
-  const [activeTab, setActiveTab] = useState('theatre');
+  const [layers, setLayers] = useState(_ckpt.layers || { corridor: true, geofence: true, waypoints: true });
+  const [scenarioId, setScenarioId] = useState(_ckpt.scenarioId || 'baseline_monitor');
+  const [activeTab, setActiveTab] = useState(_ckpt.activeTab || 'theatre');
   // Live AVM net state (primary). voicePlaying kept as alias of net open for CSS.
   const [netOpen, setNetOpen] = useState(false);
   const [voicePhase, setVoicePhase] = useState('idle'); // idle|connecting|speaking|listening|thinking|error
@@ -193,6 +200,15 @@ export default function App() {
         setProgress(r.progress);
         setPlaying((prev) => (prev !== st.playing ? st.playing : prev));
       });
+      try {
+        const ck = loadTheatreCheckpoint();
+        if (ck.imageryMode) scene.setImageryMode(ck.imageryMode);
+        if (ck.layers) {
+          Object.keys(ck.layers).forEach((name) => scene.setLayer(name, !!ck.layers[name]));
+        }
+        if (ck.camMode) scene.setCamMode(ck.camMode);
+        if (ck.thermal) scene.setThermal(true);
+      } catch (_) { /* checkpoint optional */ }
       const r = scene.setProgress(0);
       if (r) setReadout(r);
       setReady(true);
@@ -229,6 +245,32 @@ export default function App() {
     sceneRef.current?.setNetEnvelope(netOpen);
   }, [netOpen]);
 
+  // Persist Theatre/SENTINEL chrome so imagery + voice survive preview hide/restore.
+  useEffect(() => {
+    saveTheatreCheckpoint({
+      activeTab, imageryMode, layers, scenarioId, camMode, thermal,
+    });
+  }, [activeTab, imageryMode, layers, scenarioId, camMode, thermal]);
+
+  // After tab hide / preview restore: resume AudioContext and Cesium resize
+  // so textures and voice are not left muted/blank.
+  useEffect(() => {
+    const onVis = () => {
+      if (document.hidden) return;
+      unlockPlayback(audioRef.current);
+      try { sceneRef.current?.viewer?.resize(); } catch (_) {}
+      try { sceneRef.current?.setImageryMode(imageryMode); } catch (_) {}
+    };
+    document.addEventListener('visibilitychange', onVis);
+    window.addEventListener('pageshow', onVis);
+    window.addEventListener('focus', onVis);
+    return () => {
+      document.removeEventListener('visibilitychange', onVis);
+      window.removeEventListener('pageshow', onVis);
+      window.removeEventListener('focus', onVis);
+    };
+  }, [imageryMode]);
+
   // NOTE: There is intentionally NO requestAnimationFrame loop in App. The
   // CesiumScene driver loop is the SINGLE authoritative animation/camera loop;
   // it advances playback, drives the camera, and reports back via onTick().
@@ -264,6 +306,7 @@ export default function App() {
         el.load();
       }
     } catch (_) {}
+    cancelLocalSpeech();
   }, []);
 
   const closeTheNet = useCallback(() => {
@@ -294,13 +337,19 @@ export default function App() {
       if (!netOpenRef.current) return;
       const answer = (turn && turn.answer) || '';
       setVoiceCaption(answer ? `NET: ${answer}` : 'NET: (no spoken reply)');
-      if (turn && turn.audioUrl && audioRef.current && netOpenRef.current) {
+      if (netOpenRef.current && answer) {
         setVoicePhase('speaking');
-        try {
-          await playRemoteAudio(turn.audioUrl, audioRef.current);
-        } catch (e) {
-          // eslint-disable-next-line no-console
-          console.warn('[App] reply audio play failed', e);
+        let played = false;
+        if (turn && turn.audioUrl && audioRef.current) {
+          try {
+            played = await playRemoteAudio(turn.audioUrl, audioRef.current);
+          } catch (e) {
+            // eslint-disable-next-line no-console
+            console.warn('[App] reply audio play failed', e);
+          }
+        }
+        if (!played) {
+          await speakLocal(answer);
         }
       }
       if (netOpenRef.current) {
@@ -411,7 +460,8 @@ export default function App() {
       closeTheNet();
       return;
     }
-    // open the net
+    // open the net — unlock autoplay / AudioContext on this user gesture first
+    unlockPlayback(audioRef.current);
     netOpenRef.current = true;
     setNetOpen(true);
     setVoicePhase('connecting');
@@ -439,14 +489,18 @@ export default function App() {
       });
       const starter = sess.conversationStarter || 'Live net open. Speak your question.';
       setVoiceCaption(`NET: ${starter}`);
+      setVoicePhase('speaking');
+      let starterPlayed = false;
       if (sess.starterAudioUrl && audioRef.current) {
-        setVoicePhase('speaking');
         try {
-          await playRemoteAudio(sess.starterAudioUrl, audioRef.current);
+          starterPlayed = await playRemoteAudio(sess.starterAudioUrl, audioRef.current);
         } catch (e) {
           // eslint-disable-next-line no-console
           console.warn('[App] starter audio play failed', e);
         }
+      }
+      if (!starterPlayed) {
+        await speakLocal(starter);
       }
       if (!netOpenRef.current) return;
       setVoicePhase('listening');
@@ -555,7 +609,7 @@ export default function App() {
         </div>
         <div className="title-block">
           <div className="t1">IMP-08 · SENTINEL</div>
-          <div className="t2">UAE DEFENSIVE COMMAND CENTER · ILLUSTRATIVE</div>
+          <div className="t2">UAE DEFENSIVE COMMAND CENTER · ILLUSTRATIVE · NOT CONFIRMED INTEL</div>
         </div>
         <div className="appbar-right">
           <span className="cls-tag">UNCLASSIFIED // DEFENSIVE</span>
@@ -786,12 +840,12 @@ export default function App() {
       <aside className="right-rail">
         <div className="panel">
           <div className="panel-h"><Crosshair size={14} className="ph-ico" strokeWidth={1.75} /> Protected site · Al Warqa</div>
-          <img className="hero-img" src={IMAGERY.droneHero} alt="Al Warqa infrastructure context — 3D satellite capture" />
+          <img className="hero-img" src={IMAGERY.droneHero} alt="Al Warqa infrastructure context — 3D satellite capture" onError={(e) => { e.currentTarget.onerror = null; e.currentTarget.src = IMAGERY.heroVariations[0] || IMAGERY.droneHero; }} />
           <div className="context-headline">Al Warqa, Dubai — infrastructure context</div>
           <div className="hero-strip">
             {IMAGERY.heroVariations.map((src, i) => (
               <figure key={i} className="hero-thumb">
-                <img src={src} alt={`Shahed-136 ${IMAGERY.heroLabels[i]}`} loading="lazy" />
+                <img src={src} alt={`${IMAGERY.heroLabels[i]} — illustrative reconstruction capture`} loading="lazy" onError={(e) => { e.currentTarget.style.opacity = '0.25'; }} />
                 <figcaption>{IMAGERY.heroLabels[i]}</figcaption>
               </figure>
             ))}
@@ -863,7 +917,7 @@ export default function App() {
 
         <div className="panel">
           <div className="panel-h"><MapIcon size={14} className="ph-ico" strokeWidth={1.75} /> Terminal approach</div>
-          <img className="overlay-img" src={IMAGERY.backdrop.dubai3d} alt="Dubai 3D photorealistic corridor capture" />
+          <img className="overlay-img" src={IMAGERY.backdrop.dubai3d} alt="Dubai 3D photorealistic corridor capture — illustrative" onError={(e) => { e.currentTarget.onerror = null; e.currentTarget.src = IMAGERY.backdrop.groundOverlay; }} />
           <div className="muted small">Real 3D photorealistic capture over the Dubai corridor. Physics-modelled ballistic terminal dive (~-62°) converges on Jenna Apartments (Warda), Al Warqa (25.1858, 55.4045).</div>
         </div>
 
@@ -886,7 +940,7 @@ export default function App() {
       )}
 
       {/* Live AVM reply playback element — src set dynamically; NOT the static MP3 */}
-      <audio ref={audioRef} preload="none" />
+      <audio ref={audioRef} preload="none" playsInline crossOrigin="anonymous" />
 
       {/* bottom transport */}
       <footer className="transport">
@@ -949,7 +1003,7 @@ export default function App() {
 
       <div className="footer-brand">
         <OdLogo className="fb-logo" height={14} />
-        <span className="fb-sub">Defensive resilience · sentinel · ILLUSTRATIVE</span>
+        <span className="fb-sub">Defensive resilience · sentinel · ILLUSTRATIVE · not confirmed intelligence</span>
       </div>
     </div>
   );

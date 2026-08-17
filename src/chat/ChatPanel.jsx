@@ -257,7 +257,7 @@ function InlineImages({ urls, onOpen }) {
       {urls.map((url, i) => (
         <figure key={url} className="chat-img-card">
           <button type="button" className="chat-img-card__btn" onClick={() => onOpen(urls, i)} title="Expand image">
-            <img src={url} alt="Assistant-provided" loading="lazy" />
+            <img src={url} alt="Assistant-provided — illustrative, not confirmed intelligence" loading="lazy" referrerPolicy="no-referrer" onError={(e) => { e.currentTarget.style.display = 'none'; }} />
           </button>
           <figcaption>
             <a href={url} target="_blank" rel="noopener noreferrer" download>

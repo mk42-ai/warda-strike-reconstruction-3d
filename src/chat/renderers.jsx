@@ -249,7 +249,7 @@ export function ImageGrid({ urls, onOpen }) {
     <div className="osint-imggrid">
       {urls.map((url, i) => (
         <button key={url} type="button" className="osint-imggrid__cell" onClick={() => onOpen(urls, i)}>
-          <img src={url} alt="" loading="lazy" onError={(e) => { e.currentTarget.style.display = 'none'; }} />
+          <img src={url} alt="" loading="lazy" referrerPolicy="no-referrer" onError={(e) => { e.currentTarget.style.display = 'none'; }} />
         </button>
       ))}
     </div>
