@@ -166,6 +166,8 @@ export default function App() {
   const [voiceError, setVoiceError] = useState('');
   const [voiceCaption, setVoiceCaption] = useState('');
   const [lastHeard, setLastHeard] = useState('');
+  // OnDemand Media plates for the Al Warqa panel (same-origin /api/media/al-warqa).
+  const [odPlates, setOdPlates] = useState(null);
 
   // Illustrative resilience scenario chips (NOT confirmed intelligence)
   const SCENARIOS = [
@@ -244,6 +246,22 @@ export default function App() {
   useEffect(() => {
     sceneRef.current?.setNetEnvelope(netOpen);
   }, [netOpen]);
+
+  // Load Al Warqa hero + thumbs from the documented Media API via same-origin
+  // proxy. Never calls api.on-demand.io from the browser; never sends apikey.
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch('/api/media/al-warqa');
+        const json = await res.json();
+        if (!cancelled) setOdPlates(json && json.ok ? json : { ok: false, available: false });
+      } catch {
+        if (!cancelled) setOdPlates({ ok: false, available: false });
+      }
+    })();
+    return () => { cancelled = true; };
+  }, []);
 
   // Persist Theatre/SENTINEL chrome so imagery + voice survive preview hide/restore.
   useEffect(() => {
@@ -842,7 +860,7 @@ export default function App() {
           <div className="panel-h"><Crosshair size={14} className="ph-ico" strokeWidth={1.75} /> Protected site · Al Warqa</div>
           <img
             className="hero-img"
-            src={IMAGERY.droneHero}
+            src={(odPlates && odPlates.available && odPlates.hero && odPlates.hero.src) || IMAGERY.droneHero}
             alt="Al Warqa infrastructure context — 3D satellite capture"
             data-panel="al-warqa-hero"
             onError={(e) => {
@@ -857,11 +875,14 @@ export default function App() {
           />
           <div className="context-headline">Al Warqa, Dubai — infrastructure context</div>
           <div className="hero-strip">
-            {IMAGERY.heroVariations.map((src, i) => (
-              <figure key={i} className="hero-thumb">
+            {IMAGERY.heroLabels.map((label, i) => {
+              const live = odPlates && odPlates.available && odPlates.thumbs && odPlates.thumbs[i];
+              const src = (live && live.src) || IMAGERY.heroVariations[i];
+              return (
+              <figure key={label} className="hero-thumb">
                 <img
                   src={src}
-                  alt={`${IMAGERY.heroLabels[i]} — illustrative reconstruction capture`}
+                  alt={`${label} — illustrative reconstruction capture`}
                   loading="lazy"
                   data-panel={`al-warqa-thumb-${i}`}
                   onError={(e) => {
@@ -870,10 +891,14 @@ export default function App() {
                     el.src = IMAGERY.heroVariationFallbacks[i] || IMAGERY.droneHeroRecovered;
                   }}
                 />
-                <figcaption>{IMAGERY.heroLabels[i]}</figcaption>
+                <figcaption>{label}</figcaption>
               </figure>
-            ))}
+              );
+            })}
           </div>
+          {odPlates && odPlates.available === false && (
+            <div className="muted small">Media unavailable from the research library — showing local illustrative plates only.</div>
+          )}
           <div className="addr-label addr-highlight">{IMPACT_SITE.address}</div>
           <div className="kv"><span>Site</span><b>{IMPACT_SITE.lat.toFixed(7)}, {IMPACT_SITE.lon.toFixed(7)}</b></div>
           <div className="kv"><span>Plus code</span><b>{IMPACT_SITE.plusCode}</b></div>

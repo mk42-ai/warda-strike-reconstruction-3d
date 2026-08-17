@@ -19,12 +19,8 @@ import { URL } from 'node:url';
 const API_HOST = process.env.ON_DEMAND_API_HOST || 'https://api.on-demand.io';
 
 function apiKey() {
-  return (
-    process.env.ON_DEMAND_API_KEY ||
-    process.env.ONDEMAND_API_KEY ||
-    process.env.VITE_ONDEMAND_API_KEY ||
-    ''
-  );
+  // Server-only. Never read VITE_* — that prefix ships in the browser bundle.
+  return process.env.ON_DEMAND_API_KEY || process.env.ONDEMAND_API_KEY || '';
 }
 
 function readBody(req) {
@@ -149,6 +145,61 @@ export function mediaLiveProxyPlugin() {
             up.on('timeout', () => up.destroy(new Error('upstream_timeout')));
             up.end();
             return;
+          }
+
+          // Al Warqa panel plates — pick named infrastructure stills from
+          // documented GET /media/v1/public/file?source=image (header apikey).
+          // Returns same-origin /api/media/proxy?url=… so the browser never
+          // sees the apikey or a raw SAS URL it would have to CORS-fetch.
+          if (req.method === 'GET' && (u.pathname === '/api/media/al-warqa' || u.pathname === '/api/media/al-warqa/')) {
+            const collected = [];
+            for (let page = 1; page <= 8 && collected.length < 400; page += 1) {
+              const qs = new URLSearchParams({ source: 'image', limit: '50', page: String(page), sort: '-createdAt' });
+              const r = await odFetch('GET', `/media/v1/public/file?${qs.toString()}`);
+              if (r.status >= 400) {
+                const err = new Error(`media_fetch_http_${r.status}`);
+                err.detail = r.json || r.text;
+                throw err;
+              }
+              const batch = Array.isArray(r.json?.data) ? r.json.data : [];
+              if (!batch.length) break;
+              collected.push(...batch);
+              if (batch.length < 50) break;
+            }
+            const pick = (needles) => {
+              const nset = needles.map((s) => s.toLowerCase());
+              const hit = collected.find((it) => {
+                const n = String(it.name || '').toLowerCase();
+                if (/canvas-screenshot|cristiano|screenshot 20/.test(n)) return false;
+                return nset.every((k) => n.includes(k));
+              });
+              if (!hit) return null;
+              const remote = resolveMediaUrl(hit);
+              if (!remote) return null;
+              return {
+                id: hit.id,
+                name: hit.name,
+                src: `/api/media/proxy?url=${encodeURIComponent(remote)}`,
+              };
+            };
+            const hero = pick(['alwarqa', '3d']) || pick(['al-warqa', '3d']) || pick(['warqa', '3d']);
+            const thumbs = [
+              pick(['alwarqa', '2d']) || pick(['al-warqa', '2d']) || pick(['warqa', '2d']),
+              pick(['dubai', '3d']),
+              pick(['dubai', '2d']) || pick(['alwarqa', '3d']),
+            ];
+            const available = Boolean(hero && thumbs.every(Boolean));
+            return send(res, 200, {
+              ok: true,
+              available,
+              source: 'ondemand-media',
+              illustrative: true,
+              hero: hero || null,
+              thumbs: available ? thumbs : [],
+              note: available
+                ? 'OnDemand Media API plates — illustrative infrastructure context, not confirmed intelligence.'
+                : 'No matching Al Warqa / Dubai infrastructure media on this account.',
+            });
           }
 
           if (req.method === 'GET' && (u.pathname === '/api/media/health' || u.pathname === '/api/media/health/')) {

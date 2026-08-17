@@ -19,7 +19,6 @@ function apiKey() {
   return (
     process.env.ON_DEMAND_API_KEY ||
     process.env.ONDEMAND_API_KEY ||
-    process.env.VITE_ONDEMAND_API_KEY ||
     ''
   );
 }
@@ -129,6 +128,57 @@ export default async function handler(req, res) {
       up.on('timeout', () => up.destroy(new Error('upstream_timeout')));
       up.end();
       return;
+    }
+
+    if (req.method === 'GET' && action === 'al-warqa') {
+      const collected = [];
+      for (let page = 1; page <= 8 && collected.length < 400; page += 1) {
+        const qs = new URLSearchParams({ source: 'image', limit: '50', page: String(page), sort: '-createdAt' });
+        const r = await odFetch('GET', `/media/v1/public/file?${qs.toString()}`);
+        if (r.status >= 400) {
+          const err = new Error(`media_fetch_http_${r.status}`);
+          err.detail = r.json || r.text;
+          throw err;
+        }
+        const batch = Array.isArray(r.json?.data) ? r.json.data : [];
+        if (!batch.length) break;
+        collected.push(...batch);
+        if (batch.length < 50) break;
+      }
+      const pick = (needles) => {
+        const nset = needles.map((s) => s.toLowerCase());
+        const hit = collected.find((it) => {
+          const n = String(it.name || '').toLowerCase();
+          if (/canvas-screenshot|cristiano|screenshot 20/.test(n)) return false;
+          return nset.every((k) => n.includes(k));
+        });
+        if (!hit) return null;
+        const remote = resolveMediaUrl(hit);
+        if (!remote) return null;
+        return {
+          id: hit.id,
+          name: hit.name,
+          src: `/api/media/proxy?url=${encodeURIComponent(remote)}`,
+        };
+      };
+      const hero = pick(['alwarqa', '3d']) || pick(['al-warqa', '3d']) || pick(['warqa', '3d']);
+      const thumbs = [
+        pick(['alwarqa', '2d']) || pick(['al-warqa', '2d']) || pick(['warqa', '2d']),
+        pick(['dubai', '3d']),
+        pick(['dubai', '2d']) || pick(['alwarqa', '3d']),
+      ];
+      const available = Boolean(hero && thumbs.every(Boolean));
+      return send(res, 200, {
+        ok: true,
+        available,
+        source: 'ondemand-media',
+        illustrative: true,
+        hero: hero || null,
+        thumbs: available ? thumbs : [],
+        note: available
+          ? 'OnDemand Media API plates — illustrative infrastructure context, not confirmed intelligence.'
+          : 'No matching Al Warqa / Dubai infrastructure media on this account.',
+      });
     }
 
     if (req.method === 'GET' && (action === 'health' || action === '')) {
