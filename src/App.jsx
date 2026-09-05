@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState, useCallback } from 'react';
 import CesiumScene from './cesium/CesiumScene.js';
 import { mountShahedInspector } from './three/Shahed136.js';
 import { SHAHED_SPECS } from './utils/geo.js';
+import { QUALITY_PRESETS, initialQuality, rememberQuality } from './rendering/quality.js';
 import {
   META, IMPACT_SITE, CORRIDOR_ORIGIN, CORRIDOR, GEOFENCE, STATS, CAMERA_MODES,
   TIMELINE,
@@ -29,6 +30,10 @@ export default function App() {
   const cesiumRef = useRef(null);
   const sceneRef = useRef(null);
   const inspectorRef = useRef(null);
+  const inspectorApi = useRef(null);
+  const [quality, setQuality] = useState(initialQuality);
+  const [sceneError, setSceneError] = useState('');
+  const [renderStatus, setRenderStatus] = useState({ terrain: 'loading', modelReady: false });
 
   const [ready, setReady] = useState(false);
   const [playing, setPlaying] = useState(false);
@@ -83,7 +88,7 @@ export default function App() {
     // build could throw in the CesiumScene constructor, leaving sceneRef null
     // (Play's optional-chained call no-opped) and the boot screen stuck on.
     try {
-      scene = new CesiumScene(cesiumRef.current);
+      scene = new CesiumScene(cesiumRef.current, { quality });
       sceneRef.current = scene;
       scene.onReady(() => setReady(true));
       scene.onPick((p) => setPicked(p));
@@ -100,15 +105,34 @@ export default function App() {
     } catch (e) {
       // eslint-disable-next-line no-console
       console.error('[App] CesiumScene init failed:', e);
-      setReady(true);   // never leave the UI stuck behind the boot overlay
+      setSceneError(String(e?.message || e));
+      setReady(false); // leave a truthful error state, not a false LIVE badge
     }
 
     // hide boot screen (always, even on init error)
     const boot = document.getElementById('boot-screen');
-    if (boot) setTimeout(() => boot.classList.add('hidden'), 900);
+    const bootTimer = boot ? setTimeout(() => boot.classList.add('hidden'), 900) : null;
 
-    try { if (inspectorRef.current) insp = mountShahedInspector(inspectorRef.current); } catch (_) {}
+    try {
+      if (inspectorRef.current) { insp = mountShahedInspector(inspectorRef.current, { quality }); inspectorApi.current = insp; }
+    } catch (error) { console.warn('[App] inspector initialization failed:', error); }
+    const diagnosticsTimer = setInterval(() => {
+      if (scene?.viewer && !scene._destroyed) {
+        const diagnostics = scene.getDiagnostics();
+        setRenderStatus({ terrain: diagnostics.terrain, modelReady: diagnostics.modelReady, modelFallback: diagnostics.modelFallback });
+      }
+    }, 1500);
+    // Explicit opt-in, read-only diagnostics; never exposes credentials or adds
+    // route/target controls. Off in a normal user session.
+    const diagnosticsEnabled = new URLSearchParams(location.search).get('inspect') === '1';
+    const diagnostics = () => ({ utc: new Date().toISOString(), cesium: scene?.getDiagnostics(), inspector: insp?.getDiagnostics() });
+    if (diagnosticsEnabled) window.__wardaDiagnostics = diagnostics;
     return () => {
+      clearInterval(diagnosticsTimer);
+      if (bootTimer) clearTimeout(bootTimer);
+      if (sceneRef.current === scene) sceneRef.current = null;
+      if (window.__wardaDiagnostics === diagnostics) delete window.__wardaDiagnostics;
+      inspectorApi.current = null;
       try { insp && insp.dispose(); } catch (_) {}
       try { scene && scene.destroy(); } catch (_) {}
     };
@@ -187,6 +211,12 @@ export default function App() {
     return () => clearInterval(id);
   }, []);
 
+  const changeQuality = (event) => {
+    const id = event.target.value;
+    setQuality(id); rememberQuality(id);
+    sceneRef.current?.setQuality(id); inspectorApi.current?.setQuality(id);
+  };
+
   const toggleLayer = (name) => {
     const on = !layers[name];
     setLayers((s) => ({ ...s, [name]: on }));
@@ -215,6 +245,7 @@ export default function App() {
 
       {/* Cesium globe */}
       <div ref={cesiumRef} className="cesium-host" />
+      {sceneError && <div className="render-error" role="alert">3D scene unavailable: {sceneError}. The controls remain visible; reload to retry.</div>}
       {thermal && <div className="thermal-overlay" />}
 
       {/* Dark-theme corridor watch diagram — v3 high-clarity Southern Gulf timeline */}
@@ -421,7 +452,7 @@ export default function App() {
           <div className="kv"><span>Planform</span><b>{SHAHED_SPECS.planform}</b></div>
           <div className="kv"><span>Terminal dive</span><b>{SHAHED_SPECS.terminalDiveDeg}</b></div>
           <div className="kv"><span>UAE MoD</span><b>{INTEL.uaeMod.dronesDetected} detected · {INTEL.uaeMod.fellInUaeTerritory} fell in UAE</b></div>
-          <div className="muted small src-line">Sources: {SHAHED_SPECS.cite.join(', ')}. All telemetry above reads from the live cannon-es physics state.</div>
+          <div className="muted small src-line">Sources: {SHAHED_SPECS.cite.join(', ')}. Telemetry follows a precomputed illustrative profile; not operational guidance.</div>
         </div>
 
         <div className="panel">
@@ -441,11 +472,20 @@ export default function App() {
             </button>
           </div>
           <div className="kv"><span>Base imagery</span><b>{imageryMode === 'dark' ? 'Carto Dark Matter' : 'ESRI World Imagery'}</b></div>
-          <div className="kv"><span>Terrain</span><b>ESRI World Terrain 3D</b></div>
+          <div className="kv"><span>Terrain</span><b>{renderStatus.terrain === 'esri-world-terrain' ? 'ESRI World Terrain 3D' : renderStatus.terrain === 'ellipsoid-fallback' ? 'Ellipsoid fallback' : 'Loading terrain…'}</b></div>
+          <div className="kv"><span>Airframe</span><b>{renderStatus.modelReady ? 'PBR model ready' : renderStatus.modelFallback ? 'Symbol fallback' : 'Loading model…'}</b></div>
           <div className="kv"><span>Ion token</span><b className="ok-chip">NOT REQUIRED</b></div>
           <div className="muted small">Live, key-free satellite &amp; terrain streamed at the venue. Toggle a tactical dark basemap for low-light briefing. No Cesium ion / Google credentials.</div>
         </div>
       </aside>
+
+      <div className="quality-dock" role="group" aria-label="Visualization settings">
+        <label htmlFor="render-quality">Display quality</label>
+        <select id="render-quality" aria-label="Render quality" value={quality} onChange={changeQuality}>
+          {Object.entries(QUALITY_PRESETS).map(([id, preset]) => <option key={id} value={id}>{preset.label}</option>)}
+        </select>
+        <a href="/licenses/ATTRIBUTION.md" target="_blank" rel="noreferrer">Asset credits</a>
+      </div>
 
       {/* bottom transport */}
       <footer className="transport">

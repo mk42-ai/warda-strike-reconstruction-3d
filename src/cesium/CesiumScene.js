@@ -12,14 +12,15 @@
 //  Terrain  : LIVE, key-free ESRI World Terrain (ArcGISTiledElevationTerrain-
 //             Provider.fromUrl) with a graceful EllipsoidTerrainProvider fallback
 //             if the network/provider is unavailable at the venue.
-//  Cinematic: HDR + ACES tone mapping, bloom, screen-space ambient occlusion,
-//             FXAA + MSAAx4, sky/ground atmosphere, distance fog, sun-driven
-//             globe lighting and soft dynamic shadows.
+//  Display: version-supported PBR-neutral HDR, quality-scaled antialiasing,
+//           restrained contact cues, daylight and soft shadows. Symbolic
+//           overlays remain symbolic; this is not a physically validated model.
 //  Perf     : capped resolutionScale, larger globe tileCacheSize, tuned
 //             maximumScreenSpaceError + maximumRenderTimeChange for smooth play.
 //  NO Cesium ion token, NO Google key, NO AI-generated image assets anywhere.
 // ============================================================================
 import * as Cesium from 'cesium';
+import { qualityFor } from '../rendering/quality.js';
 import {
   LAUNCH_SITE, IMPACT_SITE, CORRIDOR, corridorCoords, GEOFENCE,
   VIIRS_DETECTIONS, analyzeThermal, TIMELINE, IMAGERY,
@@ -97,8 +98,16 @@ const TARGETS = {
 };
 
 export default class CesiumScene {
-  constructor(container) {
+  constructor(container, options = {}) {
     this.container = container;
+    this.quality = options.quality || 'balanced';
+    this._budget = qualityFor(this.quality);
+    this._activeEffects = new Set();
+    this._effectTimers = new Set();
+    this._effectIntervals = new Set();
+    this._autoCameraPaused = false;
+    this._warnings = [];
+    this._layerState = { corridor: true, geofence: true, waypoints: true };
     this._destroyed = false;
     this.ionMode = 'free';          // retained for API compatibility; always 'free' (no Ion)
     this.imageryMode = 'satellite'; // 'satellite' (ESRI World Imagery) | 'dark' (Carto Dark Matter)
@@ -172,7 +181,7 @@ export default class CesiumScene {
       // 1) advance scripted playback (auto-play) — the ONLY progress driver
       if (this._playing) {
         let np = this.progress + dt / TIMELINE.flightSeconds;
-        if (np >= 1) { np = 1; this._playing = false; }
+        if (np >= 1) { np = 1; this._playing = false; this._autoCameraPaused = true; }
         this._setProgressInternal(np);
       }
 
@@ -252,291 +261,64 @@ export default class CesiumScene {
   }
 
   _initViewer() {
-    // VISUAL-REALISM UPGRADE (NO CESIUM ION TOKEN): the globe now streams LIVE,
-    // key-free imagery + terrain at the venue (internet available). The base
-    // layer is real ESRI World Imagery (global satellite); a token-free Carto
-    // "Dark Matter" base is available as an alternate; and a high-detail local
-    // Al-Warqa impact patch is draped on top for the terminal-dive close-up.
-    // Terrain is live ESRI World Terrain with an ellipsoid fallback. NOTHING
-    // here needs a Cesium ion / Google key.
     this.viewer = new C.Viewer(this.container, {
-      baseLayer: false,            // base layers are added explicitly in _addBaseImagery()
-      baseLayerPicker: false, geocoder: false, homeButton: false,
+      baseLayer: false, baseLayerPicker: false, geocoder: false, homeButton: false,
       sceneModePicker: false, navigationHelpButton: false, animation: false,
       timeline: false, fullscreenButton: false, infoBox: false,
-      selectionIndicator: false, shadows: true,
-      terrainShadows: C.ShadowMode.ENABLED, requestRenderMode: false,
+      selectionIndicator: false, shadows: this._budget.shadows,
+      terrainShadows: C.ShadowMode.ENABLED, requestRenderMode: true,
+      useBrowserRecommendedResolution: true, // resolutionScale supplies the bounded DPR
       contextOptions: { webgl: { alpha: false, antialias: true, powerPreference: 'high-performance' } },
     });
-    this.viewer._cesiumWidget._creditContainer.style.display = 'none';
-    this._addBaseImagery();          // LIVE ESRI World Imagery + Carto Dark + local detail patch
-    this._loadTerrain();             // LIVE ESRI World Terrain → ellipsoid fallback (no Ion)
-
+    // Keep provider attribution visible. The project already uses these providers.
+    this._addBaseImagery();
+    this._loadTerrain();
     const scene = this.viewer.scene;
-
-    // -- PERFORMANCE: smooth playback tuning (no Ion) --------------------------
-    // Cap the render resolution to the device pixel ratio (≤2×) so high-DPI
-    // panels stay sharp without paying a 3-4× fill-rate cost during the strike.
-    try { this.viewer.resolutionScale = Math.min(window.devicePixelRatio || 1, 2.0); } catch (_) {}
-    // Bigger globe tile cache → far fewer imagery/terrain reloads while the
-    // camera sweeps the whole Iran→Dubai corridor (default is 100).
-    try { scene.globe.tileCacheSize = 1000; } catch (_) {}
-    // requestRenderMode: this scene owns a continuous rAF driver loop (playback +
-    // camera smoothing), so CONTINUOUS rendering is the correct mode for glitch-
-    // free animation — but we still tune maximumRenderTimeChange so that while
-    // idle (paused, no camera motion) Cesium coalesces frames instead of busy-
-    // spinning the GPU. During Play, setPlaying() forces requestRenderMode=false
-    // + maximumRenderTimeChange=Infinity so nothing throttles the strike.
-    try {
-      scene.requestRenderMode = false;              // continuous during the animated theatre
-      scene.maximumRenderTimeChange = 1.0;          // idle-frame coalescing budget (s)
-    } catch (_) {}
-
-    // -- render-error AUTO-RECOVERY (safety net) -------------------------------
-    // Cesium catches per-frame render exceptions, raises scene.renderError and
-    // (by default) STOPS rendering — which would freeze the play sequence with a
-    // blank/black canvas. We listen for it and, on the first error, strip the
-    // optional post-processing (bloom/silhouette), drop HDR/MSAA to the safe
-    // path, and keep the loop alive so the strike still plays. rethrowRenderErrors
-    // stays false so a single bad frame never kills the app.
-    try {
-      scene.rethrowRenderErrors = false;
-      scene.renderError.addEventListener((_scene, err) => {
-        if (this._renderRecovered) return;     // recover once
-        this._renderRecovered = true;
-        // eslint-disable-next-line no-console
-        console.warn('[CesiumScene] renderError — disabling post-processing and recovering:', err);
-        try {
-          const pp = scene.postProcessStages;
-          if (pp) {
-            if (pp.bloom) pp.bloom.enabled = false;
-            if (pp.fxaa) pp.fxaa.enabled = false;
-            if (pp.ambientOcclusion) pp.ambientOcclusion.enabled = false;   // AO off on recovery
-            pp.removeAll && pp.removeAll();
-          }
-        } catch (_) {}
-        try { if (scene.shadowMap) scene.shadowMap.softShadows = false; } catch (_) {}
-        try { scene.highDynamicRange = false; } catch (_) {}
-        try { scene.msaaSamples = 1; } catch (_) {}
-        try { scene.requestRender(); } catch (_) {}
-      });
-    } catch (_) { /* renderError event unavailable → rely on per-call guards */ }
-
-    // -- TASK B: realism tuning of the EXISTING scene/tileset config -----------
-    // (No new Google/ion credentials — only tuning params already available.)
-    // HDR render targets + MSAA + FXAA + edge-sharpening for clean, sharp tiles;
-    // physically based sun + image-based/ambient lighting; tuned atmosphere/fog.
-    //
-    // HARDENING (fix): each advanced render feature is FEATURE-DETECTED and
-    // individually try/guarded so an unsupported GPU/context (e.g. SwiftShader,
-    // low-end mobile, headless) NO-OPS gracefully instead of throwing during
-    // construction or on scene.render(). A throw here used to abort the whole
-    // CesiumScene constructor → sceneRef stayed null → the Play button (which
-    // calls sceneRef.current?.setPlaying() with optional chaining) silently did
-    // nothing. Guarding every call is what keeps the scene — and Play — alive.
-    // HDR: only enable if the runtime reports support for it.
-    try {
-      if (scene.highDynamicRangeSupported !== false) scene.highDynamicRange = true;
-    } catch (_) { /* HDR unsupported → SDR path */ }
-    // MSAA: only when the context actually supports multisampling.
-    try {
-      if (scene.msaaSupported !== false) scene.msaaSamples = 4;
-      else scene.msaaSamples = 1;
-    } catch (_) { try { scene.msaaSamples = 1; } catch (__) {} }
-    // FXAA: cheap, broadly supported, but still guarded.
-    try {
-      if (scene.postProcessStages && scene.postProcessStages.fxaa) {
-        scene.postProcessStages.fxaa.enabled = true;
-      }
-    } catch (_) { /* FXAA unavailable → MSAA/native AA still apply */ }
-    // physically based sun + globe lighting (daytime reconstruction — not night)
+    scene.rethrowRenderErrors = false;
     scene.globe.enableLighting = true;
     scene.globe.dynamicAtmosphereLighting = true;
     scene.globe.dynamicAtmosphereLightingFromSun = true;
     scene.globe.showGroundAtmosphere = true;
-    scene.globe.atmosphereLightIntensity = 28.0;   // bright midday key light
-    // image-based / ambient lighting so shadowed faces read with realistic fill
-    try {
-      scene.globe.lightingFadeOutDistance = 40_000.0;
-      scene.globe.lightingFadeInDistance = 20_000.0;
-      scene.globe.nightFadeOutDistance = 40_000.0;
-      scene.globe.atmosphereScatteringIntensity = 2.2;
-      if (scene.light) scene.light.intensity = 5.0;             // midday sun intensity
-      if ('imageBasedLighting' in scene && scene.imageBasedLighting) {
-        scene.imageBasedLighting.imageBasedLightingFactor = new C.Cartesian2(1.0, 1.0);
-        scene.imageBasedLighting.luminanceAtZenith = 0.65;      // brighter ambient IBL fill
-      }
-      if ('sphericalHarmonicCoefficients' in scene) { /* default env IBL kept */ }
-    } catch (_) {}
-    scene.globe.depthTestAgainstTerrain = true;    // tiles/markers sit on terrain
-    scene.globe.baseColor = C.Color.fromCssColorString('#1a2a3a'); // lighter base (day)
-    scene.globe.maximumScreenSpaceError = 1.5;     // sharper terrain/imagery detail
-    scene.globe.preloadSiblings = true;            // fewer holes while moving
-    // tuned distance fog → depth cue without washing labels/corridor out
+    scene.globe.depthTestAgainstTerrain = true;
+    scene.globe.baseColor = col('#293a42');
+    scene.globe.preloadSiblings = true;
     scene.fog.enabled = true;
-    scene.fog.density = 0.00002; // near-clear midday haze
-    scene.fog.screenSpaceErrorFactor = 4.0;
+    scene.fog.density = 0.00002;
+    scene.fog.screenSpaceErrorFactor = 2;
     scene.skyAtmosphere.show = true;
-    scene.skyAtmosphere.atmosphereLightIntensity = 28.0;
-    // ACES tone mapping on the Cesium HDR pipeline — FEATURE-DETECTED so it
-    // no-ops on builds that lack the Tonemapper enum / postProcessStages slot.
-    try {
-      if ('Tonemapper' in C && scene.postProcessStages && 'tonemapper' in scene.postProcessStages) {
-        scene.postProcessStages.tonemapper = C.Tonemapper.ACES;
-      }
-    } catch (_) { /* tonemapper unsupported on this Cesium build → skip */ }
-    // camera preloads: warm tiles for flight destinations + when hidden so a
-    // damped flyTo lands on already-streamed, high-detail geometry (no pop-in).
-    try {
-      scene.preloadFlightDestinations = true;
-      scene.camera.percentageChanged = 0.1;
-    } catch (_) {}
-
-    // bloom for tracers / thermal glow (guarded: no-op if unavailable)
-    try {
+    scene.light = new C.SunLight();
+    try { scene.highDynamicRange = scene.highDynamicRangeSupported !== false; } catch (_) { /* SDR fallback */ }
+    if (scene.postProcessStages) {
+      scene.postProcessStages.tonemapper = C.Tonemapper.PBR_NEUTRAL || C.Tonemapper.ACES;
+      scene.postProcessStages.exposure = 1.0;
       const bloom = scene.postProcessStages.bloom;
-      if (bloom) {
-        // OFF for label clarity — glow was smearing Cesium callouts (Southern Gulf / WARDA IMPACT)
-        bloom.enabled = false;
-        bloom.uniforms.glowOnly = false;
-        bloom.uniforms.contrast = 80;
-        bloom.uniforms.brightness = -0.55;   // v2: deeper off-state, no neon wash
-        bloom.uniforms.delta = 0.6;
-        bloom.uniforms.sigma = 1.0;
-        bloom.uniforms.stepSize = 0.6;
-      }
-    } catch (_) { /* bloom unavailable on this GPU → skip glow */ }
-
-    // -- SCREEN-SPACE AMBIENT OCCLUSION (SSAO) --------------------------------
-    // Cesium ships an ambient-occlusion post-process stage that darkens creases
-    // and where geometry meets the ground — it grounds the buildings/drone and
-    // adds cinematic contact shadowing. It needs a depth texture, so it is
-    // FEATURE-DETECTED + guarded (no-ops on GPUs/contexts without depth support,
-    // exactly like the bloom/silhouette stages) and is disabled on renderError.
-    // v2: keep AO mild so it does not darken HUD-adjacent globe labels.
-    try {
-      const ao = scene.postProcessStages && scene.postProcessStages.ambientOcclusion;
-      if (ao) {
-        ao.enabled = true;
-        if (ao.uniforms) {
-          ao.uniforms.intensity = 1.8;         // softer darkening (was 3.2)
-          ao.uniforms.bias = 0.12;             // avoid self-occlusion acne
-          ao.uniforms.lengthCap = 0.22;        // max world-space sample radius
-          ao.uniforms.stepSize = 1.6;
-          ao.uniforms.blurStepSize = 0.7;      // softer AO term
-        }
-      }
-    } catch (_) { /* AO unsupported on this GPU → skip contact shadowing */ }
-
-    // -- DYNAMIC SOFT SHADOWS --------------------------------------------------
-    // The viewer was created with shadows:true; here we tune the shadow map for
-    // presentation-grade SOFT shadows (PCF), a larger map for crisp edges, and a
-    // sun-driven light source so the drone + buildings cast real shadows across
-    // the corridor. All guarded so a weak GPU simply keeps hard/again-safe shadows.
-    try {
-      const sm = scene.shadowMap;
-      if (sm) {
-        sm.enabled = true;
-        sm.softShadows = true;                 // PCF soft-shadow filtering
-        sm.size = 2048;                        // sharper shadow edges (was default 2048/1024)
-        sm.darkness = 0.34;                    // how dark the shadowed areas read
-        sm.maximumDistance = 8000.0;           // shadow range around the focus
-        if ('normalOffset' in sm) sm.normalOffset = true;
-        if ('fadingEnabled' in sm) sm.fadingEnabled = true;
-      }
-    } catch (_) { /* shadow map tuning unsupported → viewer default shadows */ }
-
-    // edge-sharpening post-process: crisp building/tile silhouettes on top of
-    // MSAA+FXAA (subtle, presentation-grade — not a hard outline).
-    //
-    // HARDENING (fix): an edge-detection stage MUST NOT be added to the pipeline
-    // on its own — it has to be wrapped in a silhouette COMPOSITE, and the whole
-    // feature requires post-process depth-texture support. Adding it raw (as the
-    // previous build did) throws inside scene.render() on GPUs/contexts without
-    // that support, which kills the render loop and freezes the play sequence.
-    // We now gate on PostProcessStageLibrary.isSilhouetteSupported(scene) and
-    // wrap the edge stage in createSilhouetteStage(), all inside try/catch, so
-    // it no-ops gracefully where unsupported (MSAA+FXAA still apply).
-    try {
-      const lib = C.PostProcessStageLibrary;
-      const supported = typeof lib.isSilhouetteSupported === 'function'
-        ? lib.isSilhouetteSupported(scene)
-        : false;
-      if (supported && !this._sharpenAdded) {
-        const edge = lib.createEdgeDetectionStage();
-        edge.uniforms.length = 0.10;
-        edge.uniforms.color = C.Color.fromCssColorString('#0b3d2e').withAlpha(0.16);
-        const silhouette = lib.createSilhouetteStage([edge]);
-        scene.postProcessStages.add(silhouette);
-        this._sharpenAdded = true;
-      }
-    } catch (_) { /* silhouette/edge unsupported on this GPU → MSAA+FXAA only */ }
-
-    // -- OrbitControls-equivalent: free rotate + zoom + tilt at any time -------
-    // Cesium's screenSpaceCameraController IS the orbit/zoom controller. We give
-    // it enableDamping-style inertia and zoom limits scaled for the scene
-    // (Warda building ~40 m up to the whole Iran→Dubai corridor). During a
-    // scripted play these inputs are detached (see _setUserControls) so user
-    // orbit never fights the script; they resume cleanly afterwards.
+      bloom.enabled = false;
+      Object.assign(bloom.uniforms, { glowOnly: false, contrast: 30, brightness: -0.3, delta: 0.5, sigma: 1, stepSize: 0.5 });
+    }
     const cc = scene.screenSpaceCameraController;
     cc.enableCollisionDetection = true;
-    cc.enableInputs = true;
-    cc.enableRotate = true;
-    cc.enableZoom = true;
-    cc.enableTilt = true;
-    cc.enableTranslate = true;
-    cc.enableLook = true;
-    // inertia ≈ enableDamping with a sensible dampingFactor (0=off,→1=floaty)
-    cc.inertiaSpin = 0.85;
-    cc.inertiaTranslate = 0.85;
-    cc.inertiaZoom = 0.82;
-    // FIX 1: zoom must work fully — close to the building and far out to space.
-    // 5 m (right on the structure) → 20,000 km (well beyond the whole corridor).
-    cc.enableZoom = true;
-    cc.minimumZoomDistance = 5;
-    cc.maximumZoomDistance = 20_000_000;
+    cc.enableInputs = cc.enableRotate = cc.enableZoom = cc.enableTilt = cc.enableTranslate = cc.enableLook = true;
+    cc.inertiaSpin = 0.85; cc.inertiaTranslate = 0.85; cc.inertiaZoom = 0.82;
+    cc.minimumZoomDistance = 5; cc.maximumZoomDistance = 20_000_000;
     this._userControls = cc;
-    // a perspective frustum with explicit, valid near/far from the start
-    if (scene.camera.frustum && scene.camera.frustum.near != null) {
-      scene.camera.frustum.near = 1.0;
-      scene.camera.frustum.far = 30_000_000;
-    }
-
-    // -- DEFECT 1 FIX: physically sensible DAYLIGHT across all 8 camera modes ---
-    // The scene clock was previously pinned to night (~21:55Z) while globe
-    // lighting was ON, so with sun-driven lighting the globe, imagery, drone and
-    // buildings rendered dark/black in every camera mode. We set the clock to
-    // mid-MORNING LOCAL time over Dubai (Gulf Standard Time = UTC+4). 06:00Z =
-    // 10:00 local → a high, warm sun that lights the whole Iran→Dubai corridor
-    // consistently. Guarded so a bad date string can never abort init.
-    try {
-      // Fixed MIDDAY daylight from TIMELINE (daytime framing, not night clock).
-      // Stored so EVERY camera mode / play / thermal toggle re-asserts it via
-      // _applyDaylight() and lighting can never flip to a night clock time.
-      this._dayIso = (TIMELINE && TIMELINE.dayIso) || '2025-06-21T08:00:00Z';
-      this._applyDaylight();
-      // Make the sun the lighting source and ensure globe lighting is on so the
-      // daylight actually reaches terrain/imagery in every mode.
-      if (scene.sun) scene.sun.show = true;
-      if (scene.moon) scene.moon.show = false;
-      scene.globe.enableLighting = true;
+    this._applyFrustum('launch');
+    scene.renderError.addEventListener((_scene, error) => {
+      this._warnings.push(String(error?.message || error));
+      if (this._renderRecovered) return;
+      this._renderRecovered = true;
+      console.warn('[CesiumScene] optional effects disabled after render error:', error);
       try {
-        scene.globe.dynamicAtmosphereLighting = true;
-        scene.globe.dynamicAtmosphereLightingFromSun = true;
-        scene.globe.showGroundAtmosphere = true;
-      } catch (_) {}
-      // brighten the lit side so captured imagery never reads muddy/black
-      scene.globe.atmosphereLightIntensity = 32.0;
-      try {
-        scene.light = new C.SunLight();        // explicit physically based sun
-        scene.light.intensity = 5.0;
-      } catch (_) {}
-    } catch (_) { /* keep default clock/lighting if anything is unavailable */ }
-
-    // Terrain: LIVE, key-free ESRI World Terrain is loaded asynchronously in
-    // _loadTerrain() (called from _initViewer) with an EllipsoidTerrainProvider
-    // fallback if the network/provider is unavailable at the venue. No Cesium
-    // ion token is used anywhere.
+        scene.postProcessStages.bloom.enabled = false;
+        scene.postProcessStages.ambientOcclusion.enabled = false;
+        scene.highDynamicRange = false; scene.msaaSamples = 1;
+        scene.shadowMap.enabled = false;
+        this.viewer.useDefaultRenderLoop = true;
+        scene.requestRender();
+      } catch (_) { /* diagnostics retain the original failure */ }
+    });
+    this._dayIso = TIMELINE.dayIso;
+    this.setQuality(this.quality);
+    this._applyDaylight();
     this.flyOverview(0);
   }
 
@@ -545,66 +327,63 @@ export default class CesiumScene {
   // lighting is GUARANTEED to stay daylight (never flips to night) in all modes.
   // Fully guarded: a missing API or bad date string can never abort a mode switch.
   _applyDaylight() {
-    try {
-      const scene = this.viewer && this.viewer.scene;
-      if (!scene) return;
-      // Prefer TIMELINE.dayIso every call so a stale night ISO cannot stick.
-      const dayIso = (TIMELINE && TIMELINE.dayIso) || this._dayIso || '2025-06-21T08:00:00Z';
-      this._dayIso = dayIso;
-      try {
-        this.viewer.clock.currentTime = C.JulianDate.fromIso8601(dayIso);
-        // Lock the presentation clock — do not animate into night/dusk.
-        if (TIMELINE && TIMELINE.lockClock !== false) {
-          this.viewer.clock.shouldAnimate = false;
-          this.viewer.clock.multiplier = 0;
-          if (this.viewer.clock.clockRange != null && C.ClockRange) {
-            this.viewer.clock.clockRange = C.ClockRange.UNBOUNDED;
-          }
-        }
-      } catch (_) {}
-      scene.globe.enableLighting = true;                 // sun lighting in EVERY mode
-      try {
-        scene.globe.dynamicAtmosphereLighting = true;
-        scene.globe.dynamicAtmosphereLightingFromSun = true;
-      } catch (_) {}
-      if (scene.sun) scene.sun.show = true;
-      if (scene.moon) scene.moon.show = false;
-      if (scene.skyAtmosphere) {
-        scene.skyAtmosphere.show = true;
-        try { scene.skyAtmosphere.atmosphereLightIntensity = 32.0; } catch (_) {}
-      }
-      // Daytime: near-clear haze only — keep horizon + labels readable
-      if (scene.fog) {
-        scene.fog.enabled = true;
-        scene.fog.density = 0.00002;
-      }
-      scene.globe.showGroundAtmosphere = true;
-      try { scene.globe.atmosphereLightIntensity = 32.0; } catch (_) {}
-      // Physically based midday sun (not a fixed flashlight at the camera)
-      try {
-        if (!(scene.light instanceof C.SunLight)) scene.light = new C.SunLight();
-        scene.light.intensity = 5.0;
-      } catch (_) {}
-      // Keep bloom OFF so globe labels stay sharp (no neon wash / motion smear)
-      try {
-        const bloom = scene.postProcessStages && scene.postProcessStages.bloom;
-        if (bloom) {
-          bloom.enabled = false;
-          if (bloom.uniforms) {
-            bloom.uniforms.brightness = -0.5;
-            bloom.uniforms.glowOnly = false;
-          }
-        }
-      } catch (_) {}
-      // Soften AO so it does not darken label plates / horizon
-      try {
-        const ao = scene.postProcessStages && scene.postProcessStages.ambientOcclusion;
-        if (ao && ao.uniforms) {
-          ao.uniforms.intensity = Math.min(ao.uniforms.intensity || 2.0, 2.0);
-          ao.uniforms.blurStepSize = 0.7;
-        }
-      } catch (_) {}
-    } catch (_) { /* never let a lighting refresh break a mode switch */ }
+    const scene = this.viewer?.scene;
+    if (!scene) return;
+    this._dayIso = TIMELINE.dayIso;
+    // The lighting anchor remains fixed. Only transient display particles may
+    // advance this clock for a few seconds; neither flight progress nor data uses it.
+    if (!this._activeEffects.size) {
+      this.viewer.clock.currentTime = C.JulianDate.fromIso8601(this._dayIso);
+      this.viewer.clock.shouldAnimate = false;
+      this.viewer.clock.multiplier = 0;
+    }
+    scene.globe.enableLighting = true;
+    scene.globe.atmosphereLightIntensity = this.thermal ? 4 : 10;
+    if (scene.skyAtmosphere) scene.skyAtmosphere.atmosphereLightIntensity = 10;
+    if (scene.sun) scene.sun.show = true;
+    if (scene.moon) scene.moon.show = false;
+    scene.light.intensity = 2.0;
+    scene.fog.enabled = true;
+    scene.fog.density = 0.00002;
+    if (!this._activeEffects.size) scene.postProcessStages.bloom.enabled = false;
+    scene.requestRender();
+  }
+
+  setQuality(id) {
+    this.quality = ['performance', 'balanced', 'high'].includes(id) ? id : 'balanced';
+    this._budget = qualityFor(this.quality);
+    const scene = this.viewer?.scene;
+    if (!scene) return this.quality;
+    this.viewer.resolutionScale = Math.min(window.devicePixelRatio || 1, this._budget.pixelRatio);
+    scene.globe.tileCacheSize = this._budget.tileCache;
+    scene.globe.maximumScreenSpaceError = this._budget.globeSSE;
+    scene.msaaSamples = scene.msaaSupported === false ? 1 : this._budget.msaa;
+    scene.postProcessStages.fxaa.enabled = scene.msaaSamples <= 1;
+    const ao = scene.postProcessStages.ambientOcclusion;
+    ao.enabled = this._budget.ao && !this._renderRecovered;
+    Object.assign(ao.uniforms, { intensity: 0.7, bias: 0.12, lengthCap: 0.16, stepSize: 1.5, blurStepSize: 0.7 });
+    const shadow = scene.shadowMap;
+    shadow.enabled = this._budget.shadows && !this._renderRecovered;
+    shadow.softShadows = true; shadow.size = this._budget.shadowSize;
+    shadow.darkness = 0.25; shadow.maximumDistance = 6000;
+    this.viewer.resize(); scene.requestRender();
+    return this.quality;
+  }
+
+  getDiagnostics() {
+    const v = this.viewer;
+    return {
+      utc: new Date().toISOString(), engine: C.VERSION, quality: this.quality,
+      terrain: this.terrainMode || 'loading', imagery: this.imageryMode,
+      entityCount: v.entities.values.length, primitiveCount: v.scene.primitives.length,
+      entities: v.entities.values.map((e) => ({ id: e.id, name: e.name, show: e.show,
+        graphics: ['model', 'billboard', 'label', 'point', 'ellipse', 'polyline'].filter((k) => !!e[k]) })),
+      modelReady: !!this._droneModel?.ready, modelFallback: this._modelFailed,
+      cameraMode: this.camMode, progress: this.progress,
+      resolutionScale: v.resolutionScale, canvas: { width: v.canvas.width, height: v.canvas.height },
+      warnings: [...this._warnings], activeParticleSystems: this._activeEffects.size,
+      gpuDrawCalls: null, gpuTriangles: null,
+    };
   }
 
   // Shared imagery-layer polish: crisp linear filtering + a touch of contrast /
@@ -642,7 +421,7 @@ export default class CesiumScene {
         ),
         {}
       );
-      this._tuneImageryLayer(esri, { contrast: 1.06, saturation: 1.10, gamma: 1.02, brightness: 1.02 });
+      this._tuneImageryLayer(esri, { contrast: 1.0, saturation: 1.0, gamma: 1.0, brightness: 1.0 });
       layers.add(esri);
       this._baseLayers.satellite = esri;
     } catch (_) { /* Carto + detail patch below still give a usable base */ }
@@ -668,7 +447,7 @@ export default class CesiumScene {
     //     for the terminal-dive close-up (a real committed satellite capture —
     //     NOT AI-generated). SingleTileImageryProvider.fromUrl (the constructor
     //     is deprecated in Cesium 1.122) → wrapped in fromProviderAsync.
-    this._addDetailPatch('/imagery/alwarqa-2d.png', 55.4045, 25.1858, 0.06, 1.0);
+    this._addDetailPatch('/imagery/alwarqa-2d.png', 55.4045, 25.1858, 0.06, 0.35);
   }
 
   // Drape one high-detail local capture as a georeferenced imagery layer on top
@@ -681,6 +460,7 @@ export default class CesiumScene {
         {}
       );
       if (alpha != null) layer.alpha = alpha;
+      layer._displayAlpha = alpha ?? 1;
       this._tuneImageryLayer(layer, { contrast: 1.06, saturation: 1.08, gamma: 1.02, brightness: 1.02 });
       this.viewer.imageryLayers.add(layer);
       this._detailLayers.push(layer);
@@ -749,8 +529,8 @@ export default class CesiumScene {
         material: C.Color.fromCssColorString('#9FE8C8').withAlpha(0.95), // solid — no glow smear under labels
       },
     });
-    // ground shadow track
-    v.entities.add({
+    // Ground-projected symbolic route, not a physical shadow.
+    this.groundTrackEntity = v.entities.add({
       polyline: {
         positions: C.Cartesian3.fromDegreesArray(corridorCoords().flat()),
         width: 2.0, clampToGround: true,
@@ -801,14 +581,9 @@ export default class CesiumScene {
 
     // Entity clustering so waypoint/site labels do not stack on top of each other
     try {
-      if (v.entities && v.entities.cluster) {
-        v.entities.cluster.enabled = true;
-        v.entities.cluster.pixelRange = 48;
-        v.entities.cluster.minimumClusterSize = 3;
-        v.entities.cluster.clusterLabels = true;
-        v.entities.cluster.clusterBillboards = false;
-        v.entities.cluster.clusterPoints = false;
-      }
+      const cluster = v.dataSourceDisplay.defaultDataSource.clustering;
+      cluster.enabled = true; cluster.pixelRange = 36; cluster.minimumClusterSize = 4;
+      cluster.clusterLabels = true; cluster.clusterBillboards = false; cluster.clusterPoints = false;
     } catch (_) { /* clustering optional */ }
 
     // Alternating pixel offsets so adjacent waypoint labels don't overlap
@@ -919,20 +694,20 @@ export default class CesiumScene {
       position: carto(GEOFENCE.centerLon, GEOFENCE.centerLat, 0),
       ellipse: {
         semiMajorAxis: GEOFENCE.radiusM, semiMinorAxis: GEOFENCE.radiusM,
-        material: C.Color.fromCssColorString(BRAND.accent).withAlpha(0.06),
+        material: C.Color.fromCssColorString(BRAND.accent).withAlpha(0.035),
         outline: true, outlineColor: C.Color.fromCssColorString(BRAND.accent).withAlpha(0.9), outlineWidth: 2,
         height: 0, heightReference: C.HeightReference.NONE,
       },
     });
-    // dashed warning ring + label
-    v.entities.add({
+    // Outline warning ring (an ellipse outline, not a dashed material).
+    this.warningRingEntity = v.entities.add({
       position: carto(GEOFENCE.centerLon, GEOFENCE.centerLat, 0),
       ellipse: { semiMajorAxis: GEOFENCE.radiusM, semiMinorAxis: GEOFENCE.radiusM, fill: false, outline: true, outlineColor: C.Color.fromCssColorString(BRAND.warn).withAlpha(0.55), outlineWidth: 1, height: 1500 },
     });
     // geofence crossing point (where corridor trips the ring)
     this._geofenceCross = this._findGeofenceCrossing();
     if (this._geofenceCross) {
-      v.entities.add({
+      this.crossingEntity = v.entities.add({
         position: carto(this._geofenceCross.lon, this._geofenceCross.lat, this._altAt(this._geofenceCross.t) + 200),
         point: { pixelSize: 10, color: C.Color.fromCssColorString(BRAND.warn), outlineColor: C.Color.BLACK, outlineWidth: 2, disableDepthTestDistance: Number.POSITIVE_INFINITY },
         label: clearLabel(
@@ -974,15 +749,9 @@ export default class CesiumScene {
     this._droneHeading = 0;
     this._trail = [];
 
-    // -- DEFECT 3 FIX: render the REAL 3D drone model in the play scene --------
-    // Previously the moving drone was a Cesium BILLBOARD built from an SVG data
-    // URI whose <svg> declared only a viewBox (no width/height) — Cesium could
-    // not rasterise it, so it drew a black quad ("black box"). We now load a
-    // real Shahed-136 glTF (public/models/shahed136.glb) as an entity.model,
-    // oriented along the flight heading + dive pitch. The billboard is kept as a
-    // GUARDED FALLBACK (shown only if the model fails to load) so the drone is
-    // never invisible. orientation is a CallbackProperty driven by the same
-    // _dronePos/_droneHeading the driver already updates each frame.
+    // Original /shahed136.glb is retained and surface-corrected. Its public
+    // Cesium.Model primitive owns real ready/error events; the semantic entity
+    // retains label, fallback and pick identity. No new location/route controls.
     const positionCb = new C.CallbackProperty(() => this._dronePos, false);
     const orientationCb = new C.CallbackProperty(() => {
       try {
@@ -999,15 +768,6 @@ export default class CesiumScene {
     this.droneEntity = v.entities.add({
       position: positionCb,
       orientation: orientationCb,
-      model: {
-        uri: `${import.meta.env.BASE_URL || '/'}shahed136.glb`,
-        minimumPixelSize: 64,        // always ≥64px even from corridor distance
-        maximumScale: 2000,
-        scale: 12,                   // prominent but not unrealistic up close
-        runAnimations: false,
-        // rely on the GLB's own PBR materials + the scene sun (DEFECT 1 daylight)
-        heightReference: C.HeightReference.NONE,
-      },
       // billboard fallback (hidden unless the model fails to load — see below)
       billboard: {
         image: MARKER_URIS.shahed,
@@ -1037,18 +797,29 @@ export default class CesiumScene {
       },
     });
 
-    // If the glTF fails to load (404 / decode error / GPU), reveal the billboard
-    // fallback so the drone is still visible — and log it. Guarded.
-    try {
-      const model = this.droneEntity.model;
-      if (model && model.readyEvent && model.errorEvent) {
-        model.errorEvent.addEventListener((err) => {
-          // eslint-disable-next-line no-console
-          console.warn('[CesiumScene] drone model failed to load → billboard fallback:', err);
-          this._modelFailed = true;
-        });
-      }
-    } catch (_) { /* older Cesium: rely on the model, fallback stays hidden */ }
+    this._modelFailed = false;
+    this._droneModel = null;
+    const url = `${import.meta.env?.BASE_URL || '/'}shahed136.glb`;
+    const fail = (error) => {
+      if (this._destroyed) return;
+      this._modelFailed = true;
+      if (this._droneModel) this._droneModel.show = false;
+      this._warnings.push(`Airframe model: ${error?.message || error}`);
+      console.warn('[CesiumScene] airframe sprite fallback:', error);
+      v.scene.requestRender();
+    };
+    C.Model.fromGltfAsync({
+      url, id: this.droneEntity, modelMatrix: C.Transforms.eastNorthUpToFixedFrame(this._dronePos),
+      scale: 1, minimumPixelSize: 36, maximumScale: 300,
+      shadows: C.ShadowMode.ENABLED,
+    }).then((model) => {
+      if (this._destroyed) { model.destroy(); return; }
+      this._droneModel = v.scene.primitives.add(model);
+      model.imageBasedLighting.imageBasedLightingFactor = new C.Cartesian2(1, 1);
+      model.errorEvent.addEventListener(fail);
+      model.readyEvent.addEventListener(() => { this._modelFailed = false; v.scene.requestRender(); });
+      this._syncDroneModel(); v.scene.requestRender();
+    }).catch(fail);
 
     this.trailEntity = v.entities.add({
       polyline: {
@@ -1057,6 +828,12 @@ export default class CesiumScene {
         material: C.Color.fromCssColorString('#ff9a4a').withAlpha(0.92), // solid trail for clarity
       },
     });
+  }
+
+  _syncDroneModel() {
+    if (!this._droneModel || !validCartesian(this._dronePos)) return;
+    const hpr = new C.HeadingPitchRoll(num(this._droneHeading), num(this._dronePitch), 0);
+    this._droneModel.modelMatrix = C.Transforms.headingPitchRollToFixedFrame(this._dronePos, hpr);
   }
 
   // -- VIIRS thermal/IR detection layer --------------------------------------
@@ -1073,7 +850,7 @@ export default class CesiumScene {
         position: carto(a.lon, a.lat, 30),
         ellipse: {
           semiMajorAxis: radius, semiMinorAxis: radius,
-          material: C.Color.fromCssColorString(sevColor).withAlpha(0.35),
+          material: C.Color.fromCssColorString(sevColor).withAlpha(0.22),
           outline: true, outlineColor: C.Color.fromCssColorString(sevColor).withAlpha(0.9),
           height: 20,
         },
@@ -1105,12 +882,12 @@ export default class CesiumScene {
     try {
       const bloom = scene.postProcessStages && scene.postProcessStages.bloom;
       if (bloom) {
-        bloom.enabled = !!on;
+        bloom.enabled = false; // thermal semantics use data overlays, not blown-out glow
         if (bloom.uniforms) bloom.uniforms.brightness = on ? 0.15 : -0.55;
       }
     } catch (_) {}
     // restore the DAYLIGHT intensity when leaving thermal
-    scene.globe.atmosphereLightIntensity = on ? 3.0 : 32.0;
+    scene.globe.atmosphereLightIntensity = on ? 4.0 : 10.0;
     this.imageryAlpha(on ? 0.32 : 1.0);
     if (!on) this._applyDaylight();              // re-assert daylight leaving thermal
     if (on) this.setCamMode('thermal');
@@ -1122,7 +899,7 @@ export default class CesiumScene {
     try {
       const active = this._baseLayers[this.imageryMode] || this._baseLayers.satellite;
       if (active) active.alpha = a;
-      this._detailLayers.forEach((l) => { try { l.alpha = a; } catch (_) {} });
+      this._detailLayers.forEach((l) => { try { l.alpha = a * (l._displayAlpha ?? 1); } catch (_) {} });
     } catch (_) {
       const layers = this.viewer.imageryLayers;   // defensive fallback
       if (layers.length) layers.get(0).alpha = a;
@@ -1141,6 +918,7 @@ export default class CesiumScene {
   // No React-side requestAnimationFrame is ever created (kills stacked loops).
   setPlaying(on) {
     this._playing = !!on;
+    this._autoCameraPaused = !this._playing;
     if (this._playing && this.progress >= 1) this._setProgressInternal(0);
     this._lastT = performance.now();   // avoid a dt spike on resume
     if (this._playing) this._applyDaylight();   // both plays start in daylight
@@ -1154,13 +932,15 @@ export default class CesiumScene {
         const lockClock = !(TIMELINE && TIMELINE.lockClock === false);
         if (this._playing) {
           // Progress is rAF-driven; keep presentation clock pinned to daytime.
-          this.viewer.clock.shouldAnimate = lockClock ? false : true;
-          if (lockClock) this.viewer.clock.multiplier = 0;
+          this.viewer.clock.shouldAnimate = this._activeEffects.size > 0 || !lockClock;
+          if (lockClock) this.viewer.clock.multiplier = this._activeEffects.size ? 1 : 0;
           scene.requestRenderMode = false;            // never throttle while playing
           scene.maximumRenderTimeChange = Infinity;
           scene.requestRender();                       // kick an immediate frame
         } else {
-          this.viewer.clock.shouldAnimate = false;
+          this.viewer.clock.shouldAnimate = this._activeEffects.size > 0;
+          scene.requestRenderMode = this._activeEffects.size === 0;
+          scene.requestRender();
         }
       }
       // re-arm the single driver loop if it was ever cancelled (defensive)
@@ -1195,6 +975,7 @@ export default class CesiumScene {
     // terminal dive renders nose-down (p.pitch is the signed flight-path angle:
     // negative = descending → nose-down, which is exactly Cesium HPR's sign).
     this._dronePitch = num(p.pitch, 0);
+    this._syncDroneModel();
     // build glowing trail up to current progress (skip any NaN samples)
     const trail = [];
     const steps = 80;
@@ -1206,6 +987,7 @@ export default class CesiumScene {
       }
     }
     this._trail = C.Cartesian3.fromDegreesArrayHeights(trail);
+    this.viewer.scene.requestRender();
 
     // impact flash near the end
     if (this.progress > 0.985 && !this._impactFired) {
@@ -1257,7 +1039,7 @@ export default class CesiumScene {
         flashBillboard = v.entities.add({
           position: carto(IMPACT_SITE.lon, IMPACT_SITE.lat, IMPACT_SITE.height + 30),
           billboard: {
-            image: flashImg, width: 480, height: 480,
+            image: flashImg, width: 200, height: 200,
             disableDepthTestDistance: Number.POSITIVE_INFINITY,
             color: C.Color.WHITE.withAlpha(1.0),
           },
@@ -1269,27 +1051,29 @@ export default class CesiumScene {
     // and longer than before so the blast clearly reads from any camera mode.
     const flash = v.entities.add({
       position: carto(IMPACT_SITE.lon, IMPACT_SITE.lat, IMPACT_SITE.height),
-      ellipse: { semiMajorAxis: 650, semiMinorAxis: 650, material: C.Color.fromCssColorString('#ff7a18').withAlpha(0.85), height: 10 },
+      ellipse: { semiMajorAxis: 45, semiMinorAxis: 45, material: C.Color.fromCssColorString('#ff7a18').withAlpha(0.85), height: 10 },
       point: { pixelSize: 40, color: C.Color.fromCssColorString('#fffceb'), disableDepthTestDistance: Number.POSITIVE_INFINITY },
     });
     const shock = v.entities.add({
       position: carto(IMPACT_SITE.lon, IMPACT_SITE.lat, IMPACT_SITE.height + 4),
       ellipse: {
-        semiMajorAxis: 150, semiMinorAxis: 150, height: 12,
+        semiMajorAxis: 25, semiMinorAxis: 25, height: 12,
         fill: false, outline: true,
         outlineColor: C.Color.fromCssColorString('#ffe6a6').withAlpha(0.95), outlineWidth: 6,
       },
     });
-    let r = 650, op = 0.85, sr = 150, fb = 1.0, tick = 0;
+    let r = 45, op = 0.65, sr = 25, fb = 1.0, tick = 0;
     const grow = setInterval(() => {
       tick++;
-      r += 300; op -= 0.035; sr += 900; fb -= 0.08;   // slower fade → lasts longer
+      r += 8; op -= 0.035; sr += 20; fb -= 0.08;   // slower fade → lasts longer
       // flash billboard fades out quickly (first ~0.6s)
       if (flashBillboard) {
         try { flashBillboard.billboard.color = C.Color.WHITE.withAlpha(Math.max(0, fb)); } catch (_) {}
       }
       if (op <= 0 || this._destroyed) {
         clearInterval(grow);
+        this._effectIntervals.delete(grow);
+        v.scene.requestRender();
         try { v.entities.remove(flash); v.entities.remove(shock); if (flashBillboard) v.entities.remove(flashBillboard); } catch (_) {}
         return;
       }
@@ -1297,7 +1081,9 @@ export default class CesiumScene {
       flash.ellipse.material = C.Color.fromCssColorString('#ff7a18').withAlpha(Math.max(0, op));
       shock.ellipse.semiMajorAxis = sr; shock.ellipse.semiMinorAxis = sr;
       shock.ellipse.outlineColor = C.Color.fromCssColorString('#ffe6a6').withAlpha(Math.max(0, op));
+      v.scene.requestRender();
     }, 60);
+    this._effectIntervals.add(grow);
 
     // (4–6) particle systems: fireball + smoke + debris (sprite PNGs)
     try { this._spawnImpactParticles(); } catch (e) { /* particles unsupported → flash/shock still play */ }
@@ -1307,9 +1093,13 @@ export default class CesiumScene {
       const bloom = v.scene.postProcessStages && v.scene.postProcessStages.bloom;
       if (bloom) {
         const prev = bloom.uniforms.brightness;
-        bloom.enabled = true;
-        bloom.uniforms.brightness = 0.9;                 // brighter spike
-        setTimeout(() => { try { bloom.uniforms.brightness = this.thermal ? 0.25 : prev; } catch (_) {} }, 1800);
+        bloom.enabled = this._budget.bloom;
+        bloom.uniforms.brightness = 0.12;                 // brighter spike
+        const bloomTimer = setTimeout(() => {
+          this._effectTimers.delete(bloomTimer);
+          try { bloom.uniforms.brightness = prev; bloom.enabled = false; } catch (_) {}
+        }, 1800);
+        this._effectTimers.add(bloomTimer);
       }
     } catch (_) {}
   }
@@ -1329,7 +1119,7 @@ export default class CesiumScene {
     // If a fetch/decode fails, Cesium falls back to the runtime radial sprite
     // (passed as `image` only when the PNG is unavailable) so the blast never
     // disappears. Paths are BASE_URL-relative so they resolve on any deploy root.
-    const base = (import.meta.env.BASE_URL || '/');
+    const base = (import.meta.env?.BASE_URL || '/');
     const fireImg  = `${base}explosion-fireball.png`;
     const smokeImg = `${base}explosion-smoke.png`;
     const debrisImg = `${base}explosion-debris.png`;
@@ -1337,10 +1127,11 @@ export default class CesiumScene {
     const smokeFallback = radialSprite('rgba(90,90,90,0.9)', 'rgba(40,40,40,0.6)');
     const debrisFallback = radialSprite('rgba(60,40,24,1)', 'rgba(20,14,8,0.7)');
     const systems = [];
+    const density = this._budget.particles;
 
     // fireball — BIGGER + denser burst, brighter, lasts longer before settling
     systems.push(new C.ParticleSystem({
-      image: fireImg, modelMatrix,
+      image: fireImg, modelMatrix, loop: false,
       startColor: C.Color.fromCssColorString('#fff6d0').withAlpha(1.0),
       endColor: C.Color.fromCssColorString('#ff3a12').withAlpha(0.0),
       startScale: 1.6, endScale: 9.0,                       // larger growth
@@ -1349,28 +1140,28 @@ export default class CesiumScene {
       imageSize: new C.Cartesian2(90, 90),                   // bigger sprites
       emissionRate: 0,
       bursts: [
-        new C.ParticleBurst({ time: 0.0, minimum: 320, maximum: 460 }),  // denser
-        new C.ParticleBurst({ time: 0.25, minimum: 120, maximum: 200 }),
+        new C.ParticleBurst({ time: 0.0, minimum: Math.round(100 * density), maximum: Math.round(150 * density) }),  // denser
+        new C.ParticleBurst({ time: 0.25, minimum: Math.round(30 * density), maximum: Math.round(60 * density) }),
       ],
       lifetime: 2.4,
       emitter: new C.SphereEmitter(10.0),
     }));
     // smoke — large, billowing, rising, long-lived plume
     systems.push(new C.ParticleSystem({
-      image: smokeImg, modelMatrix,
+      image: smokeImg, modelMatrix, loop: false,
       startColor: C.Color.fromCssColorString('#4a4a4d').withAlpha(0.9),
       endColor: C.Color.fromCssColorString('#161618').withAlpha(0.0),
       startScale: 3.0, endScale: 22.0,                       // huge plume
       minimumParticleLife: 2.6, maximumParticleLife: 5.0,    // lingers
       minimumSpeed: 6, maximumSpeed: 22,
       imageSize: new C.Cartesian2(120, 120),
-      emissionRate: 140,                                     // much denser
+      emissionRate: 45 * density,                                     // much denser
       lifetime: 3.4,
       emitter: new C.CircleEmitter(12.0),
     }));
     // debris — many fast scattered embers on ballistic arcs
     systems.push(new C.ParticleSystem({
-      image: debrisImg, modelMatrix,
+      image: debrisImg, modelMatrix, loop: false,
       startColor: C.Color.fromCssColorString('#ff7a2a').withAlpha(1.0),
       endColor: C.Color.fromCssColorString('#140e08').withAlpha(0.0),
       startScale: 1.0, endScale: 0.3,
@@ -1378,7 +1169,7 @@ export default class CesiumScene {
       minimumSpeed: 45, maximumSpeed: 130,                   // flung further
       imageSize: new C.Cartesian2(18, 18),
       emissionRate: 0,
-      bursts: [ new C.ParticleBurst({ time: 0.0, minimum: 140, maximum: 220 }) ],
+      bursts: [ new C.ParticleBurst({ time: 0.0, minimum: Math.round(35 * density), maximum: Math.round(70 * density) }) ],
       lifetime: 2.4,
       emitter: new C.ConeEmitter(C.Math.toRadians(62)),
     }));
@@ -1387,7 +1178,7 @@ export default class CesiumScene {
     // the blast always renders (image can be reassigned before first render).
     const fallbacks = [fireFallback, smokeFallback, debrisFallback];
     systems.forEach((s, i) => {
-      try { scene.primitives.add(s); } catch (_) {}
+      try { scene.primitives.add(s); this._activeEffects.add(s); } catch (_) {}
       // Cesium loads the image async; if it errors, fall back. Guarded.
       try {
         if (fallbacks[i]) {
@@ -1397,10 +1188,21 @@ export default class CesiumScene {
         }
       } catch (_) {}
     });
-    // auto-cleanup after the (longer) blast finishes
-    setTimeout(() => {
-      systems.forEach((s) => { try { if (!s.isDestroyed || !s.isDestroyed()) scene.primitives.remove(s); } catch (_) {} });
+    this.viewer.clock.shouldAnimate = true;
+    this.viewer.clock.multiplier = 1;
+    scene.requestRenderMode = false;
+    const cleanupTimer = setTimeout(() => {
+      this._effectTimers.delete(cleanupTimer);
+      systems.forEach((s) => {
+        this._activeEffects.delete(s);
+        try { if (!s.isDestroyed()) scene.primitives.remove(s); } catch (_) {}
+      });
+      if (!this._destroyed && !this._activeEffects.size) {
+        this._applyDaylight();
+        scene.requestRenderMode = !this._playing;
+      }
     }, 6500);
+    this._effectTimers.add(cleanupTimer);
   }
 
   readout() {
@@ -1434,6 +1236,8 @@ export default class CesiumScene {
   setCamMode(id) {
     this.camMode = id;
     this._trackMode = id;
+    this._autoCameraPaused = false;
+    this.viewer.scene.requestRender();
     this._camSettled = false;                    // begin a fresh eased transition
     this._camFrame = this._currentCameraFrame() || this._camFrame; // start from reality
     this._applyFrustum(id);                       // reset near/far for this mode
@@ -1588,7 +1392,7 @@ export default class CesiumScene {
       case 'topdown':
         return frame(lon, lat, Math.max(9000, h + 9000), hdgDeg, -89.9);
       case 'orbit': {
-        this._orbitAngle += 0.0035;
+        this._orbitAngle += 0.21 * (this._cameraDt ?? 1 / 60);
         const off = destPoint(lon, lat, (this._orbitAngle * 57.3) % 360, 2200);
         return frame(off[0], off[1], h + 1200, (this._orbitAngle * 57.3 + 180) % 360, -20);
       }
@@ -1613,13 +1417,14 @@ export default class CesiumScene {
   // validates every vector, and applies via setView — never an async flyTo.
   _driveCamera(dt) {
     if (!this.viewer) return;
+    this._cameraDt = Math.max(0, Math.min(0.1, dt));
 
     // While an eased flyTo (static point / waypoint / impact) is in flight, the
     // driver stands down entirely so it never fights the tween.
-    if (this._flying) { this._setUserControls(false); return; }
+    if (this._flying) { this._setUserControls(false); this.viewer.scene.requestRender(); return; }
 
     const mode = this._trackMode;
-    const always = (mode === 'orbit' || mode === 'cinema');        // auto-cameras
+    const always = !this._autoCameraPaused && (mode === 'orbit' || mode === 'cinema');
     const followWhilePlaying = (mode === 'chase' || mode === 'topdown' || mode === 'thermal');
 
     // is the loop scripting the camera this frame?
@@ -1653,6 +1458,7 @@ export default class CesiumScene {
       return; // skip this frame; keep last good camera
     }
     this._camFrame = f;
+    this.viewer.scene.requestRender();
     this.viewer.camera.setView({
       destination: dest,
       orientation: {
@@ -1700,9 +1506,12 @@ export default class CesiumScene {
   }
 
   setLayer(name, on) {
-    if (name === 'corridor' && this.corridorEntity) this.corridorEntity.show = on;
-    if (name === 'geofence' && this.geofenceEntity) this.geofenceEntity.show = on;
-    if (name === 'waypoints') this.waypointEntities.forEach((e) => (e.show = on));
+    this._layerState[name] = !!on;
+    const set = (entity) => { if (entity) entity.show = !!on; };
+    if (name === 'corridor') [this.corridorEntity, this.groundTrackEntity, this.trailEntity].forEach(set);
+    if (name === 'geofence') [this.geofenceEntity, this.warningRingEntity, this.crossingEntity].forEach(set);
+    if (name === 'waypoints') this.waypointEntities.forEach(set);
+    this.viewer.scene.requestRender();
   }
 
   // Realism tuning for ANY Cesium3DTileset already configured in the scene
@@ -1762,6 +1571,11 @@ export default class CesiumScene {
 
   destroy() {
     this._destroyed = true;
+    this._effectTimers.forEach((timer) => clearTimeout(timer));
+    this._effectTimers.clear();
+    this._effectIntervals.forEach((interval) => clearInterval(interval));
+    this._effectIntervals.clear();
+    this._activeEffects.clear();
     cancelAnimationFrame(this._rafId);                 // stop the single driver loop
     try { if (this._impactHoldTimer) clearTimeout(this._impactHoldTimer); } catch (_) {}  // FIX 3: no dangling timer
     try { if (this._onResize) window.removeEventListener('resize', this._onResize); } catch (_) {}
