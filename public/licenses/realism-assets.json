@@ -1,0 +1,230 @@
+{
+  "retrieved_utc": "2026-09-05T02:46:20.177954Z",
+  "third_party_assets": [
+    {
+      "asset": "Studio Small 09",
+      "author": {
+        "Sergej Majboroda": "All"
+      },
+      "source_url": "https://polyhaven.com/a/studio_small_09",
+      "download_url": "https://dl.polyhaven.org/file/ph-assets/HDRIs/hdr/1k/studio_small_09_1k.hdr",
+      "license": "CC0-1.0",
+      "license_url": "https://polyhaven.com/license",
+      "legal_code": "https://creativecommons.org/publicdomain/zero/1.0/",
+      "license_verified_utc": "2026-09-05T02:37:05.579646Z",
+      "retrieval_start_utc": "2026-09-05T02:46:19.953264Z",
+      "retrieval_end_utc": "2026-09-05T02:46:20.176587Z",
+      "bytes": 1615248,
+      "sha256": "e7cfda5f4e98e623db12b8bfd0184e048488e4855d9c83e2751fb44a32e80c45",
+      "upstream_md5_verified": true,
+      "local_path": "public/environments/studio-small-09-1k.hdr",
+      "redistribution": "Poly Haven official license states all assets CC0; commercial reuse and redistribution allowed; attribution retained voluntarily. Website text/branding not embedded as an asset.",
+      "modifications": "None; provider-supplied 1K HDR selected instead of high-resolution original.",
+      "usage": "Lazy-loaded inspector reflection environment; not geolocated environmental evidence."
+    }
+  ],
+  "original_generated_assets": [
+    {
+      "name": "Coating roughness/normal data textures",
+      "source": "src/three/Shahed136.js surfaceMaps",
+      "origin": "Deterministic procedural artwork generated in this implementation; no third-party inputs."
+    }
+  ],
+  "inherited_assets": {
+    "status": "Existing public imagery,GLB,brand and effect assets are user-provided repository content; ownership/redistribution evidence was not included in prior session. No additional third-party model or satellite capture was acquired.",
+    "note": "Do not infer CC0 for inherited imagery or brand assets."
+  },
+  "engine_licenses": {
+    "three": "MIT",
+    "three-stdlib": "MIT",
+    "cesium": "Apache-2.0",
+    "postprocessing": "Zlib"
+  },
+  "generated_inputs": [
+    {
+      "name": "dusty asphalt",
+      "source_url": "https://airevdev.blob.core.windows.net/on-demand-dev/6692b763e851d28a036ab30e/agents/dH8vW3lZEP.png",
+      "creator_generator": "bulkGenerateImagesgptImage2 (supplied orchestration response)",
+      "retrieval_start_utc": "2026-09-05T05:30:13.488333Z",
+      "retrieval_end_utc": "2026-09-05T05:30:13.779415Z",
+      "input_sha256": "ede691dbdc656959c743b4357c33355e504bf268643b3a2d714429014411b0e5",
+      "input_size": [
+        1024,
+        1024
+      ],
+      "license_or_status": "USER_SUPPLIED_ORIGINAL_GENERATED_ASSET",
+      "rights_basis": "User explicitly supplied original generated inputs and authorized integration in this repository. No third-party asset library license or CC0 claim is made.",
+      "redistribution_notes": "Generated asset variants included solely as part of the user-authorized application/source. No trademark, third-party ownership, public-domain, measured-physical-map or external license claim.",
+      "integrated": false,
+      "selection_reason": "No actual matching asphalt/architectural glazing/soot-bearing surface is constructed; rejected rather than inventing a new structure or replacing geospatial imagery.",
+      "files_produced": []
+    },
+    {
+      "name": "dusty aged concrete",
+      "source_url": "https://airevdev.blob.core.windows.net/on-demand-dev/6692b763e851d28a036ab30e/agents/3VeUFPY22Q.png",
+      "creator_generator": "bulkGenerateImagesgptImage2 (supplied orchestration response)",
+      "retrieval_start_utc": "2026-09-05T05:30:13.488815Z",
+      "retrieval_end_utc": "2026-09-05T05:30:13.775511Z",
+      "input_sha256": "7e4ad613a0bc9af87ed9a43ea41a0d3c135f8de07298a34fe15c1081ef4f4a6d",
+      "input_size": [
+        1024,
+        1024
+      ],
+      "license_or_status": "USER_SUPPLIED_ORIGINAL_GENERATED_ASSET",
+      "rights_basis": "User explicitly supplied original generated inputs and authorized integration in this repository. No third-party asset library license or CC0 claim is made.",
+      "redistribution_notes": "Generated asset variants included solely as part of the user-authorized application/source. No trademark, third-party ownership, public-domain, measured-physical-map or external license claim.",
+      "integrated": true,
+      "selection_reason": "Existing inspector contact-disc surface; dielectric concrete baseColor.",
+      "files_produced": [
+        {
+          "input_index": 1,
+          "file": "public/textures/dusty-concrete-basecolor-256.jpg",
+          "width": 256,
+          "height": 256,
+          "format": "JPEG",
+          "color_space": "sRGB",
+          "semantic": "baseColor / color detail only",
+          "bytes": 9439,
+          "sha256": "2954d3511c32c5ca5fc2840ca7e39df1e68d91924d4437740de94f71e7e1a050",
+          "modifications": "Lanczos resize; JPEG quality86,4:4:4; original color preserved",
+          "not_derived": [
+            "normal",
+            "height",
+            "metallic",
+            "roughness",
+            "AO",
+            "opacity"
+          ],
+          "generated_utc": "2026-09-05T05:35:45.747371Z"
+        },
+        {
+          "input_index": 1,
+          "file": "public/textures/dusty-concrete-basecolor-512.jpg",
+          "width": 512,
+          "height": 512,
+          "format": "JPEG",
+          "color_space": "sRGB",
+          "semantic": "baseColor / color detail only",
+          "bytes": 49456,
+          "sha256": "6650d349b326b689fe73884389e8514ade2220debdda30f4a73f5eab059b31e1",
+          "modifications": "Lanczos resize; JPEG quality86,4:4:4; original color preserved",
+          "not_derived": [
+            "normal",
+            "height",
+            "metallic",
+            "roughness",
+            "AO",
+            "opacity"
+          ],
+          "generated_utc": "2026-09-05T05:35:45.765830Z"
+        }
+      ]
+    },
+    {
+      "name": "sun-faded paint",
+      "source_url": "https://airevdev.blob.core.windows.net/on-demand-dev/6692b763e851d28a036ab30e/agents/p20kUva3nW.png",
+      "creator_generator": "bulkGenerateImagesgptImage2 (supplied orchestration response)",
+      "retrieval_start_utc": "2026-09-05T05:30:13.489283Z",
+      "retrieval_end_utc": "2026-09-05T05:30:13.777614Z",
+      "input_sha256": "3508d7cb789f6a95120962e0221ed1459b3e4e1f88621eac0566c9d00ab431b8",
+      "input_size": [
+        1024,
+        1024
+      ],
+      "license_or_status": "USER_SUPPLIED_ORIGINAL_GENERATED_ASSET",
+      "rights_basis": "User explicitly supplied original generated inputs and authorized integration in this repository. No third-party asset library license or CC0 claim is made.",
+      "redistribution_notes": "Generated asset variants included solely as part of the user-authorized application/source. No trademark, third-party ownership, public-domain, measured-physical-map or external license claim.",
+      "integrated": true,
+      "selection_reason": "Existing painted recognition-model surfaces; input is color variation, not a claim that composite material is steel.",
+      "files_produced": [
+        {
+          "input_index": 2,
+          "file": "public/textures/faded-paint-basecolor-256.jpg",
+          "width": 256,
+          "height": 256,
+          "format": "JPEG",
+          "color_space": "sRGB",
+          "semantic": "baseColor / color detail only",
+          "bytes": 3862,
+          "sha256": "5f55196447101ad0938e9e0bce3bee7a938ec2f347378225391c958222df05fb",
+          "modifications": "Lanczos resize; JPEG quality86,4:4:4; contrast0.6 for restrained paint wear",
+          "not_derived": [
+            "normal",
+            "height",
+            "metallic",
+            "roughness",
+            "AO",
+            "opacity"
+          ],
+          "generated_utc": "2026-09-05T05:35:45.800659Z"
+        },
+        {
+          "input_index": 2,
+          "file": "public/textures/faded-paint-basecolor-512.jpg",
+          "width": 512,
+          "height": 512,
+          "format": "JPEG",
+          "color_space": "sRGB",
+          "semantic": "baseColor / color detail only",
+          "bytes": 17027,
+          "sha256": "88338789885256d5770fd47f1234fe7b754dc2b763afb667c9918637b840daf2",
+          "modifications": "Lanczos resize; JPEG quality86,4:4:4; contrast0.6 for restrained paint wear",
+          "not_derived": [
+            "normal",
+            "height",
+            "metallic",
+            "roughness",
+            "AO",
+            "opacity"
+          ],
+          "generated_utc": "2026-09-05T05:35:45.818660Z"
+        }
+      ],
+      "additional_integration": {
+        "file": "public/shahed136.glb",
+        "operation": "Embedded provider-derived256pxJPEG as core glTF2 baseColorTexture on matte-composite,painted-cover,wing-coating; normals,roughness,metalness,positions and nodes preserved",
+        "script": "scripts/embed-display-texture.mjs",
+        "timestamp_utc": "2026-09-05T05:43:51.660766Z",
+        "glb_sha256": "bbf7188bbac93ff72470d27ed046e2ed483f3bb9d00639e529581dc49258b65c",
+        "texture_compression": "JPEG image only; no Draco/Meshopt/KTX2/Basis claim"
+      }
+    },
+    {
+      "name": "architectural glass grime",
+      "source_url": "https://airevdev.blob.core.windows.net/on-demand-dev/6692b763e851d28a036ab30e/agents/1fEL1OnV1X.png",
+      "creator_generator": "bulkGenerateImagesgptImage2 (supplied orchestration response)",
+      "retrieval_start_utc": "2026-09-05T05:30:13.490012Z",
+      "retrieval_end_utc": "2026-09-05T05:30:13.780502Z",
+      "input_sha256": "ac36c8c46621d476093d8b686aeb7fc7c8f3e993bc565d608fdb6ce6380f236e",
+      "input_size": [
+        1024,
+        1024
+      ],
+      "license_or_status": "USER_SUPPLIED_ORIGINAL_GENERATED_ASSET",
+      "rights_basis": "User explicitly supplied original generated inputs and authorized integration in this repository. No third-party asset library license or CC0 claim is made.",
+      "redistribution_notes": "Generated asset variants included solely as part of the user-authorized application/source. No trademark, third-party ownership, public-domain, measured-physical-map or external license claim.",
+      "integrated": false,
+      "selection_reason": "No actual matching asphalt/architectural glazing/soot-bearing surface is constructed; rejected rather than inventing a new structure or replacing geospatial imagery.",
+      "files_produced": []
+    },
+    {
+      "name": "concrete soot discoloration",
+      "source_url": "https://airevdev.blob.core.windows.net/on-demand-dev/6692b763e851d28a036ab30e/agents/TDWEdkoZqW.png",
+      "creator_generator": "bulkGenerateImagesgptImage2 (supplied orchestration response)",
+      "retrieval_start_utc": "2026-09-05T05:30:13.490454Z",
+      "retrieval_end_utc": "2026-09-05T05:30:13.781386Z",
+      "input_sha256": "95e1967c58fe2ac353a9da8fafb22441398c92d8df75ad54715030622e1c269a",
+      "input_size": [
+        1024,
+        1024
+      ],
+      "license_or_status": "USER_SUPPLIED_ORIGINAL_GENERATED_ASSET",
+      "rights_basis": "User explicitly supplied original generated inputs and authorized integration in this repository. No third-party asset library license or CC0 claim is made.",
+      "redistribution_notes": "Generated asset variants included solely as part of the user-authorized application/source. No trademark, third-party ownership, public-domain, measured-physical-map or external license claim.",
+      "integrated": false,
+      "selection_reason": "No actual matching asphalt/architectural glazing/soot-bearing surface is constructed; rejected rather than inventing a new structure or replacing geospatial imagery.",
+      "files_produced": []
+    }
+  ],
+  "updated_utc": "2026-09-05T05:35:45.818808Z"
+}

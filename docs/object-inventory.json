@@ -1,0 +1,5934 @@
+{
+  "recorded_utc": "2026-09-05T05:48:31.578128Z",
+  "scope": "All meaningful first-party constructors/families + all14GLBparts + explicitlyinvokedRoomEnvironment objects;actual GPUtile/batch counts notobserved",
+  "source_baseline_commit": "a4d6706ce25d247d21013d46e350e727e64ecc7c",
+  "preserved_prior_uncommitted_work": true,
+  "rows": [
+    {
+      "id": "globe",
+      "family": "WGS84 globe / streamed terrain",
+      "count": 1,
+      "source": "src/cesium/CesiumScene.js::_initViewer/_loadTerrain",
+      "geometry_or_model": "Cesium terrain mesh tiles; ESRI provider with ellipsoid fallback",
+      "material_or_texture": "ESRI satellite/CARTO + existing local impact raster",
+      "upgrade_or_preservation": "Existing geospatial foundation preserved; supported PBR-neutral/HDR/exposure,atmosphere and quality budgets; no generated terrain replacement.",
+      "validation": "source/CPU tested; browser pixels unverified"
+    },
+    {
+      "id": "sky",
+      "family": "Sky / atmosphere / Sun / Moon",
+      "count": 4,
+      "source": "src/cesium/CesiumScene.js::_initViewer/_applyDaylight",
+      "geometry_or_model": "Cesium engine-owned scene objects",
+      "material_or_texture": "SunLight and engine atmosphere; Moon remains hidden",
+      "upgrade_or_preservation": "Prior daylight,depth cues and exposure refinement retained; no invented sky asset or new engine.",
+      "validation": "source/CPU tested; browser pixels unverified"
+    },
+    {
+      "id": "route",
+      "family": "Corridor + ground track + progress trail",
+      "count": 3,
+      "source": "src/cesium/CesiumScene.js::_buildStatic/_buildDrone/_setProgressInternal",
+      "geometry_or_model": "241-vertex main path; ground-clamped dashed track;81-sample trail",
+      "material_or_texture": "Color + PolylineDash material",
+      "upgrade_or_preservation": "Preserve exact scenario path; clearer non-glowing treatment,full layer-family toggles and on-demand renders from existing improvements.",
+      "validation": "source/CPU tested; browser pixels unverified"
+    },
+    {
+      "id": "waypoint",
+      "family": "Numbered waypoint markers",
+      "count": 6,
+      "source": "src/cesium/CesiumScene.js::_buildStatic;src/brand/assets.js",
+      "geometry_or_model": "Point and text/billboard graphics",
+      "material_or_texture": "Legible labels/intrinsic-sized generated SVG",
+      "upgrade_or_preservation": "All six retained; supported clustering,readable offsets and complete visibility toggle retained.",
+      "validation": "source/CPU tested; browser pixels unverified"
+    },
+    {
+      "id": "site",
+      "family": "Launch/impact site markers",
+      "count": 2,
+      "source": "src/cesium/CesiumScene.js::_buildStatic;src/brand/assets.js",
+      "geometry_or_model": "SVG billboards + labels",
+      "material_or_texture": "Existing intrinsic-sized vector markers",
+      "upgrade_or_preservation": "All geospatial positions and control actions preserved; do not substitute target models or invent buildings.",
+      "validation": "source/CPU tested; browser pixels unverified"
+    },
+    {
+      "id": "geofence",
+      "family": "Filled ring / warning ring / crossing marker",
+      "count": 3,
+      "source": "src/cesium/CesiumScene.js::_buildStatic/setLayer",
+      "geometry_or_model": "Ellipse66.7km + elevated outline + crossing point",
+      "material_or_texture": "Translucent color and label",
+      "upgrade_or_preservation": "Restrained overlay alpha and full-family visibility retained; symbolic shapes intentionally not falsely photorealistic.",
+      "validation": "source/CPU tested; browser pixels unverified"
+    },
+    {
+      "id": "thermal",
+      "family": "Thermal footprints",
+      "count": 10,
+      "source": "src/cesium/CesiumScene.js::_buildThermalLayer",
+      "geometry_or_model": "Ellipse/point classes computed from unchanged historical data",
+      "material_or_texture": "Severity colors alpha0.22",
+      "upgrade_or_preservation": "Preserved all10historical detections; retained restrained fill and corrected thermal/daylight grading.",
+      "validation": "source/CPU tested; browser pixels unverified"
+    },
+    {
+      "id": "thermal-alert",
+      "family": "Thermal alert billboards/labels",
+      "count": 8,
+      "source": "src/cesium/CesiumScene.js::_buildThermalLayer",
+      "geometry_or_model": "SVG billboards and text",
+      "material_or_texture": "Existing warning SVG with intrinsic dimensions",
+      "upgrade_or_preservation": "All8alerts preserved; no inference of physical damage from texture inputs.",
+      "validation": "source/CPU tested; browser pixels unverified"
+    },
+    {
+      "id": "cesium-model",
+      "family": "Geospatial airframe semantic entity and GLB primitive",
+      "count": 1,
+      "source": "src/cesium/CesiumScene.js::_buildDrone/_syncDroneModel;public/shahed136.glb",
+      "geometry_or_model": "Public Cesium.Model.fromGltfAsync + original fallback entity",
+      "material_or_texture": "Eight PBR materials; embedded generated paint baseColor on three coatings",
+      "upgrade_or_preservation": "Existing scale,real Model ready/error fallback and IBL retained; coreglTF2JPEG color added; no operational change.",
+      "validation": "source/CPU tested; browser pixels unverified"
+    },
+    {
+      "id": "glb-0",
+      "family": "part_0 / geometry_0",
+      "count": 1,
+      "source": "public/shahed136.glb::meshes[0]",
+      "geometry_or_model": "112triangles; normals/UV; node transforms retained",
+      "material_or_texture": {
+        "pbrMetallicRoughness": {
+          "baseColorFactor": [
+            1,
+            1,
+            1,
+            1
+          ],
+          "roughnessFactor": 0.65,
+          "metallicFactor": 0.02,
+          "baseColorTexture": {
+            "index": 0,
+            "texCoord": 0
+          }
+        },
+        "doubleSided": false,
+        "name": "matte-composite",
+        "alphaMode": "OPAQUE"
+      },
+      "upgrade_or_preservation": "Existing corrected normals,hard-edge face splits andPBR retained; coat materials use validated color-only embeddedJPEG where appropriate. All14original parts retained.",
+      "validation": "source/CPU tested; browser pixels unverified"
+    },
+    {
+      "id": "glb-1",
+      "family": "part_1 / geometry_1",
+      "count": 1,
+      "source": "public/shahed136.glb::meshes[1]",
+      "geometry_or_model": "56triangles; normals/UV; node transforms retained",
+      "material_or_texture": {
+        "pbrMetallicRoughness": {
+          "baseColorFactor": [
+            1,
+            1,
+            1,
+            1
+          ],
+          "roughnessFactor": 0.58,
+          "metallicFactor": 0.01,
+          "baseColorTexture": {
+            "index": 0,
+            "texCoord": 0
+          }
+        },
+        "doubleSided": false,
+        "name": "painted-cover",
+        "alphaMode": "OPAQUE"
+      },
+      "upgrade_or_preservation": "Existing corrected normals,hard-edge face splits andPBR retained; coat materials use validated color-only embeddedJPEG where appropriate. All14original parts retained.",
+      "validation": "source/CPU tested; browser pixels unverified"
+    },
+    {
+      "id": "glb-2",
+      "family": "part_2 / geometry_2",
+      "count": 1,
+      "source": "public/shahed136.glb::meshes[2]",
+      "geometry_or_model": "112triangles; normals/UV; node transforms retained",
+      "material_or_texture": {
+        "pbrMetallicRoughness": {
+          "baseColorFactor": [
+            1,
+            1,
+            1,
+            1
+          ],
+          "roughnessFactor": 0.58,
+          "metallicFactor": 0.01,
+          "baseColorTexture": {
+            "index": 0,
+            "texCoord": 0
+          }
+        },
+        "doubleSided": false,
+        "name": "painted-cover",
+        "alphaMode": "OPAQUE"
+      },
+      "upgrade_or_preservation": "Existing corrected normals,hard-edge face splits andPBR retained; coat materials use validated color-only embeddedJPEG where appropriate. All14original parts retained.",
+      "validation": "source/CPU tested; browser pixels unverified"
+    },
+    {
+      "id": "glb-3",
+      "family": "part_3 / geometry_3",
+      "count": 1,
+      "source": "public/shahed136.glb::meshes[3]",
+      "geometry_or_model": "96triangles; normals/UV; node transforms retained",
+      "material_or_texture": {
+        "pbrMetallicRoughness": {
+          "baseColorFactor": [
+            0.28,
+            0.31,
+            0.3,
+            1
+          ],
+          "roughnessFactor": 0.44,
+          "metallicFactor": 0.75
+        },
+        "doubleSided": false,
+        "name": "satin-metal",
+        "alphaMode": "OPAQUE"
+      },
+      "upgrade_or_preservation": "Existing corrected normals,hard-edge face splits andPBR retained; coat materials use validated color-only embeddedJPEG where appropriate. All14original parts retained.",
+      "validation": "source/CPU tested; browser pixels unverified"
+    },
+    {
+      "id": "glb-4",
+      "family": "part_4 / geometry_4",
+      "count": 1,
+      "source": "public/shahed136.glb::meshes[4]",
+      "geometry_or_model": "12triangles; normals/UV; node transforms retained",
+      "material_or_texture": {
+        "pbrMetallicRoughness": {
+          "baseColorFactor": [
+            1,
+            1,
+            1,
+            1
+          ],
+          "roughnessFactor": 0.67,
+          "metallicFactor": 0.02,
+          "baseColorTexture": {
+            "index": 0,
+            "texCoord": 0
+          }
+        },
+        "doubleSided": false,
+        "name": "wing-coating",
+        "alphaMode": "OPAQUE"
+      },
+      "upgrade_or_preservation": "Existing corrected normals,hard-edge face splits andPBR retained; coat materials use validated color-only embeddedJPEG where appropriate. All14original parts retained.",
+      "validation": "source/CPU tested; browser pixels unverified"
+    },
+    {
+      "id": "glb-5",
+      "family": "part_5 / geometry_5",
+      "count": 1,
+      "source": "public/shahed136.glb::meshes[5]",
+      "geometry_or_model": "12triangles; normals/UV; node transforms retained",
+      "material_or_texture": {
+        "pbrMetallicRoughness": {
+          "baseColorFactor": [
+            1,
+            1,
+            1,
+            1
+          ],
+          "roughnessFactor": 0.67,
+          "metallicFactor": 0.02,
+          "baseColorTexture": {
+            "index": 0,
+            "texCoord": 0
+          }
+        },
+        "doubleSided": false,
+        "name": "wing-coating",
+        "alphaMode": "OPAQUE"
+      },
+      "upgrade_or_preservation": "Existing corrected normals,hard-edge face splits andPBR retained; coat materials use validated color-only embeddedJPEG where appropriate. All14original parts retained.",
+      "validation": "source/CPU tested; browser pixels unverified"
+    },
+    {
+      "id": "glb-6",
+      "family": "part_6 / geometry_6",
+      "count": 1,
+      "source": "public/shahed136.glb::meshes[6]",
+      "geometry_or_model": "12triangles; normals/UV; node transforms retained",
+      "material_or_texture": {
+        "pbrMetallicRoughness": {
+          "baseColorFactor": [
+            0.69,
+            0.64,
+            0.42,
+            1
+          ],
+          "roughnessFactor": 0.6,
+          "metallicFactor": 0.02
+        },
+        "doubleSided": false,
+        "name": "identification-paint",
+        "alphaMode": "OPAQUE"
+      },
+      "upgrade_or_preservation": "Existing corrected normals,hard-edge face splits andPBR retained; coat materials use validated color-only embeddedJPEG where appropriate. All14original parts retained.",
+      "validation": "source/CPU tested; browser pixels unverified"
+    },
+    {
+      "id": "glb-7",
+      "family": "part_7 / geometry_7",
+      "count": 1,
+      "source": "public/shahed136.glb::meshes[7]",
+      "geometry_or_model": "12triangles; normals/UV; node transforms retained",
+      "material_or_texture": {
+        "pbrMetallicRoughness": {
+          "baseColorFactor": [
+            0.69,
+            0.64,
+            0.42,
+            1
+          ],
+          "roughnessFactor": 0.6,
+          "metallicFactor": 0.02
+        },
+        "doubleSided": false,
+        "name": "identification-paint",
+        "alphaMode": "OPAQUE"
+      },
+      "upgrade_or_preservation": "Existing corrected normals,hard-edge face splits andPBR retained; coat materials use validated color-only embeddedJPEG where appropriate. All14original parts retained.",
+      "validation": "source/CPU tested; browser pixels unverified"
+    },
+    {
+      "id": "glb-8",
+      "family": "part_8 / geometry_8",
+      "count": 1,
+      "source": "public/shahed136.glb::meshes[8]",
+      "geometry_or_model": "12triangles; normals/UV; node transforms retained",
+      "material_or_texture": {
+        "pbrMetallicRoughness": {
+          "baseColorFactor": [
+            0.1,
+            0.13,
+            0.12,
+            1
+          ],
+          "roughnessFactor": 0.67,
+          "metallicFactor": 0.1
+        },
+        "doubleSided": false,
+        "name": "dark-composite",
+        "alphaMode": "OPAQUE"
+      },
+      "upgrade_or_preservation": "Existing corrected normals,hard-edge face splits andPBR retained; coat materials use validated color-only embeddedJPEG where appropriate. All14original parts retained.",
+      "validation": "source/CPU tested; browser pixels unverified"
+    },
+    {
+      "id": "glb-9",
+      "family": "part_9 / geometry_9",
+      "count": 1,
+      "source": "public/shahed136.glb::meshes[9]",
+      "geometry_or_model": "12triangles; normals/UV; node transforms retained",
+      "material_or_texture": {
+        "pbrMetallicRoughness": {
+          "baseColorFactor": [
+            0.1,
+            0.13,
+            0.12,
+            1
+          ],
+          "roughnessFactor": 0.67,
+          "metallicFactor": 0.1
+        },
+        "doubleSided": false,
+        "name": "dark-composite",
+        "alphaMode": "OPAQUE"
+      },
+      "upgrade_or_preservation": "Existing corrected normals,hard-edge face splits andPBR retained; coat materials use validated color-only embeddedJPEG where appropriate. All14original parts retained.",
+      "validation": "source/CPU tested; browser pixels unverified"
+    },
+    {
+      "id": "glb-10",
+      "family": "part_10 / geometry_10",
+      "count": 1,
+      "source": "public/shahed136.glb::meshes[10]",
+      "geometry_or_model": "56triangles; normals/UV; node transforms retained",
+      "material_or_texture": {
+        "pbrMetallicRoughness": {
+          "baseColorFactor": [
+            0.3,
+            0.33,
+            0.34,
+            1
+          ],
+          "roughnessFactor": 0.4,
+          "metallicFactor": 0.82
+        },
+        "doubleSided": false,
+        "name": "metal-fitting",
+        "alphaMode": "OPAQUE"
+      },
+      "upgrade_or_preservation": "Existing corrected normals,hard-edge face splits andPBR retained; coat materials use validated color-only embeddedJPEG where appropriate. All14original parts retained.",
+      "validation": "source/CPU tested; browser pixels unverified"
+    },
+    {
+      "id": "glb-11",
+      "family": "part_11 / geometry_11",
+      "count": 1,
+      "source": "public/shahed136.glb::meshes[11]",
+      "geometry_or_model": "12triangles; normals/UV; node transforms retained",
+      "material_or_texture": {
+        "pbrMetallicRoughness": {
+          "baseColorFactor": [
+            0.1,
+            0.13,
+            0.12,
+            1
+          ],
+          "roughnessFactor": 0.67,
+          "metallicFactor": 0.1
+        },
+        "doubleSided": false,
+        "name": "dark-composite",
+        "alphaMode": "OPAQUE"
+      },
+      "upgrade_or_preservation": "Existing corrected normals,hard-edge face splits andPBR retained; coat materials use validated color-only embeddedJPEG where appropriate. All14original parts retained.",
+      "validation": "source/CPU tested; browser pixels unverified"
+    },
+    {
+      "id": "glb-12",
+      "family": "part_12 / geometry_12",
+      "count": 1,
+      "source": "public/shahed136.glb::meshes[12]",
+      "geometry_or_model": "12triangles; normals/UV; node transforms retained",
+      "material_or_texture": {
+        "pbrMetallicRoughness": {
+          "baseColorFactor": [
+            0.1,
+            0.13,
+            0.12,
+            1
+          ],
+          "roughnessFactor": 0.67,
+          "metallicFactor": 0.1
+        },
+        "doubleSided": false,
+        "name": "dark-composite",
+        "alphaMode": "OPAQUE"
+      },
+      "upgrade_or_preservation": "Existing corrected normals,hard-edge face splits andPBR retained; coat materials use validated color-only embeddedJPEG where appropriate. All14original parts retained.",
+      "validation": "source/CPU tested; browser pixels unverified"
+    },
+    {
+      "id": "glb-13",
+      "family": "part_13 / geometry_13",
+      "count": 1,
+      "source": "public/shahed136.glb::meshes[13]",
+      "geometry_or_model": "320triangles; normals/UV; node transforms retained",
+      "material_or_texture": {
+        "pbrMetallicRoughness": {
+          "baseColorFactor": [
+            0.025,
+            0.045,
+            0.055,
+            1
+          ],
+          "roughnessFactor": 0.12,
+          "metallicFactor": 0
+        },
+        "doubleSided": false,
+        "name": "optical-cover",
+        "alphaMode": "OPAQUE"
+      },
+      "upgrade_or_preservation": "Existing corrected normals,hard-edge face splits andPBR retained; coat materials use validated color-only embeddedJPEG where appropriate. All14original parts retained.",
+      "validation": "source/CPU tested; browser pixels unverified"
+    },
+    {
+      "id": "inspector-Shahed136/fuse[0]",
+      "family": "fuse",
+      "count": 1,
+      "source": "src/three/Shahed136.js::buildShahed136",
+      "geometry_or_model": {
+        "id": "geometry-0",
+        "type": "LatheGeometry",
+        "parameters": {
+          "points": [
+            {
+              "x": 0.3,
+              "y": -2.75
+            },
+            {
+              "x": 0.36,
+              "y": -2.6
+            },
+            {
+              "x": 0.39,
+              "y": -2.1
+            },
+            {
+              "x": 0.41,
+              "y": -0.8
+            },
+            {
+              "x": 0.43,
+              "y": 1.5
+            },
+            {
+              "x": 0.4,
+              "y": 2.65
+            },
+            {
+              "x": 0.34,
+              "y": 2.8
+            }
+          ],
+          "segments": 40,
+          "phiStart": 0,
+          "phiLength": 6.283185307179586
+        },
+        "vertices": 287,
+        "triangles": 480,
+        "hasNormals": true,
+        "hasUV": true
+      },
+      "material_or_texture": [
+        {
+          "id": "material-0",
+          "name": "matte-painted-composite",
+          "type": "MeshStandardMaterial",
+          "color": "b6b8a5",
+          "roughness": 0.64,
+          "metalness": 0.02,
+          "opacity": 1,
+          "transparent": false,
+          "emissive": "000000",
+          "emissiveIntensity": 1,
+          "map": null,
+          "normalMap": "original-fine-coating-normal",
+          "roughnessMap": "original-fine-coating-roughness",
+          "side": 0
+        }
+      ],
+      "upgrade_or_preservation": "Existing semantic component retained;desktop high geometry,bevelled/lathed silhouettes;lower-resolution mobile geometry;sharedresources;paintmaps oncoatings,notmetallicchannels. Instanced fasteners controlled by nativeLOD.",
+      "validation": "source/CPU tested; browser pixels unverified"
+    },
+    {
+      "id": "inspector-Shahed136/nose[1]",
+      "family": "nose",
+      "count": 1,
+      "source": "src/three/Shahed136.js::buildShahed136",
+      "geometry_or_model": {
+        "id": "geometry-1",
+        "type": "LatheGeometry",
+        "parameters": {
+          "points": [
+            {
+              "x": 0,
+              "y": -1.35
+            },
+            {
+              "x": 0.08,
+              "y": -1.18
+            },
+            {
+              "x": 0.2,
+              "y": -0.7
+            },
+            {
+              "x": 0.3,
+              "y": -0.18
+            },
+            {
+              "x": 0.3,
+              "y": 0
+            }
+          ],
+          "segments": 40,
+          "phiStart": 0,
+          "phiLength": 6.283185307179586
+        },
+        "vertices": 205,
+        "triangles": 320,
+        "hasNormals": true,
+        "hasUV": true
+      },
+      "material_or_texture": [
+        {
+          "id": "material-1",
+          "name": "painted-nose-cover",
+          "type": "MeshStandardMaterial",
+          "color": "838779",
+          "roughness": 0.57,
+          "metalness": 0.01,
+          "opacity": 1,
+          "transparent": false,
+          "emissive": "000000",
+          "emissiveIntensity": 1,
+          "map": null,
+          "normalMap": "original-fine-coating-normal",
+          "roughnessMap": "original-fine-coating-roughness",
+          "side": 0
+        }
+      ],
+      "upgrade_or_preservation": "Existing semantic component retained;desktop high geometry,bevelled/lathed silhouettes;lower-resolution mobile geometry;sharedresources;paintmaps oncoatings,notmetallicchannels. Instanced fasteners controlled by nativeLOD.",
+      "validation": "source/CPU tested; browser pixels unverified"
+    },
+    {
+      "id": "inspector-Shahed136/eo[2]",
+      "family": "eo",
+      "count": 1,
+      "source": "src/three/Shahed136.js::buildShahed136",
+      "geometry_or_model": {
+        "id": "geometry-2",
+        "type": "SphereGeometry",
+        "parameters": {
+          "radius": 0.23,
+          "widthSegments": 28,
+          "heightSegments": 18,
+          "phiStart": 0,
+          "phiLength": 6.283185307179586,
+          "thetaStart": 0,
+          "thetaLength": 3.141592653589793
+        },
+        "vertices": 551,
+        "triangles": 952,
+        "hasNormals": true,
+        "hasUV": true
+      },
+      "material_or_texture": [
+        {
+          "id": "material-2",
+          "name": "dark-optical-cover",
+          "type": "MeshPhysicalMaterial",
+          "color": "101e22",
+          "roughness": 0.09,
+          "metalness": 0,
+          "opacity": 1,
+          "transparent": false,
+          "emissive": "000000",
+          "emissiveIntensity": 1,
+          "clearcoat": 1,
+          "map": null,
+          "normalMap": null,
+          "roughnessMap": null,
+          "side": 0
+        }
+      ],
+      "upgrade_or_preservation": "Existing semantic component retained;desktop high geometry,bevelled/lathed silhouettes;lower-resolution mobile geometry;sharedresources;paintmaps oncoatings,notmetallicchannels. Instanced fasteners controlled by nativeLOD.",
+      "validation": "source/CPU tested; browser pixels unverified"
+    },
+    {
+      "id": "inspector-Shahed136/tailCap[3]",
+      "family": "tailCap",
+      "count": 1,
+      "source": "src/three/Shahed136.js::buildShahed136",
+      "geometry_or_model": {
+        "id": "geometry-3",
+        "type": "CylinderGeometry",
+        "parameters": {
+          "radiusTop": 0.34,
+          "radiusBottom": 0.28,
+          "height": 0.44,
+          "radialSegments": 40,
+          "heightSegments": 1,
+          "openEnded": false,
+          "thetaStart": 0,
+          "thetaLength": 6.283185307179586
+        },
+        "vertices": 244,
+        "triangles": 160,
+        "hasNormals": true,
+        "hasUV": true
+      },
+      "material_or_texture": [
+        {
+          "id": "material-3",
+          "name": "satin-metal-fittings",
+          "type": "MeshStandardMaterial",
+          "color": "737b7e",
+          "roughness": 0.43,
+          "metalness": 0.82,
+          "opacity": 1,
+          "transparent": false,
+          "emissive": "000000",
+          "emissiveIntensity": 1,
+          "map": null,
+          "normalMap": null,
+          "roughnessMap": "original-fine-coating-roughness",
+          "side": 0
+        }
+      ],
+      "upgrade_or_preservation": "Existing semantic component retained;desktop high geometry,bevelled/lathed silhouettes;lower-resolution mobile geometry;sharedresources;paintmaps oncoatings,notmetallicchannels. Instanced fasteners controlled by nativeLOD.",
+      "validation": "source/CPU tested; browser pixels unverified"
+    },
+    {
+      "id": "inspector-Shahed136/wingR[4]",
+      "family": "wingR",
+      "count": 1,
+      "source": "src/three/Shahed136.js::buildShahed136",
+      "geometry_or_model": {
+        "id": "geometry-4",
+        "type": "ExtrudeGeometry",
+        "parameters": {
+          "options": {
+            "steps": 1,
+            "depth": 0.065,
+            "bevelEnabled": true,
+            "bevelThickness": 0.015,
+            "bevelSize": 0.025,
+            "bevelSegments": 2,
+            "curveSegments": 1
+          }
+        },
+        "vertices": 96,
+        "triangles": 32,
+        "hasNormals": true,
+        "hasUV": true
+      },
+      "material_or_texture": [
+        {
+          "id": "material-0",
+          "name": "matte-painted-composite",
+          "type": "MeshStandardMaterial",
+          "color": "b6b8a5",
+          "roughness": 0.64,
+          "metalness": 0.02,
+          "opacity": 1,
+          "transparent": false,
+          "emissive": "000000",
+          "emissiveIntensity": 1,
+          "map": null,
+          "normalMap": "original-fine-coating-normal",
+          "roughnessMap": "original-fine-coating-roughness",
+          "side": 0
+        }
+      ],
+      "upgrade_or_preservation": "Existing semantic component retained;desktop high geometry,bevelled/lathed silhouettes;lower-resolution mobile geometry;sharedresources;paintmaps oncoatings,notmetallicchannels. Instanced fasteners controlled by nativeLOD.",
+      "validation": "source/CPU tested; browser pixels unverified"
+    },
+    {
+      "id": "inspector-Shahed136/wingL[5]",
+      "family": "wingL",
+      "count": 1,
+      "source": "src/three/Shahed136.js::buildShahed136",
+      "geometry_or_model": {
+        "id": "geometry-4",
+        "type": "ExtrudeGeometry",
+        "parameters": {
+          "options": {
+            "steps": 1,
+            "depth": 0.065,
+            "bevelEnabled": true,
+            "bevelThickness": 0.015,
+            "bevelSize": 0.025,
+            "bevelSegments": 2,
+            "curveSegments": 1
+          }
+        },
+        "vertices": 96,
+        "triangles": 32,
+        "hasNormals": true,
+        "hasUV": true
+      },
+      "material_or_texture": [
+        {
+          "id": "material-0",
+          "name": "matte-painted-composite",
+          "type": "MeshStandardMaterial",
+          "color": "b6b8a5",
+          "roughness": 0.64,
+          "metalness": 0.02,
+          "opacity": 1,
+          "transparent": false,
+          "emissive": "000000",
+          "emissiveIntensity": 1,
+          "map": null,
+          "normalMap": "original-fine-coating-normal",
+          "roughnessMap": "original-fine-coating-roughness",
+          "side": 0
+        }
+      ],
+      "upgrade_or_preservation": "Existing semantic component retained;desktop high geometry,bevelled/lathed silhouettes;lower-resolution mobile geometry;sharedresources;paintmaps oncoatings,notmetallicchannels. Instanced fasteners controlled by nativeLOD.",
+      "validation": "source/CPU tested; browser pixels unverified"
+    },
+    {
+      "id": "inspector-Shahed136/tip[-1][6]",
+      "family": "tip[-1]",
+      "count": 1,
+      "source": "src/three/Shahed136.js::buildShahed136",
+      "geometry_or_model": {
+        "id": "geometry-5",
+        "type": "BoxGeometry",
+        "parameters": {
+          "width": 1,
+          "height": 1,
+          "depth": 1,
+          "widthSegments": 5,
+          "heightSegments": 5,
+          "depthSegments": 5
+        },
+        "vertices": 900,
+        "triangles": 300,
+        "hasNormals": true,
+        "hasUV": true
+      },
+      "material_or_texture": [
+        {
+          "id": "material-4",
+          "name": "non-emissive-identification-paint",
+          "type": "MeshStandardMaterial",
+          "color": "c1b784",
+          "roughness": 0.55,
+          "metalness": 0.03,
+          "opacity": 1,
+          "transparent": false,
+          "emissive": "000000",
+          "emissiveIntensity": 1,
+          "map": null,
+          "normalMap": null,
+          "roughnessMap": "original-fine-coating-roughness",
+          "side": 0
+        }
+      ],
+      "upgrade_or_preservation": "Existing semantic component retained;desktop high geometry,bevelled/lathed silhouettes;lower-resolution mobile geometry;sharedresources;paintmaps oncoatings,notmetallicchannels. Instanced fasteners controlled by nativeLOD.",
+      "validation": "source/CPU tested; browser pixels unverified"
+    },
+    {
+      "id": "inspector-Shahed136/fin[-1][7]",
+      "family": "fin[-1]",
+      "count": 1,
+      "source": "src/three/Shahed136.js::buildShahed136",
+      "geometry_or_model": {
+        "id": "geometry-6",
+        "type": "BoxGeometry",
+        "parameters": {
+          "width": 1,
+          "height": 1,
+          "depth": 1,
+          "widthSegments": 5,
+          "heightSegments": 5,
+          "depthSegments": 5
+        },
+        "vertices": 900,
+        "triangles": 300,
+        "hasNormals": true,
+        "hasUV": true
+      },
+      "material_or_texture": [
+        {
+          "id": "material-5",
+          "name": "dark-composite-trim",
+          "type": "MeshStandardMaterial",
+          "color": "343b37",
+          "roughness": 0.67,
+          "metalness": 0.16,
+          "opacity": 1,
+          "transparent": false,
+          "emissive": "000000",
+          "emissiveIntensity": 1,
+          "map": null,
+          "normalMap": null,
+          "roughnessMap": "original-fine-coating-roughness",
+          "side": 0
+        }
+      ],
+      "upgrade_or_preservation": "Existing semantic component retained;desktop high geometry,bevelled/lathed silhouettes;lower-resolution mobile geometry;sharedresources;paintmaps oncoatings,notmetallicchannels. Instanced fasteners controlled by nativeLOD.",
+      "validation": "source/CPU tested; browser pixels unverified"
+    },
+    {
+      "id": "inspector-Shahed136/tip[1][8]",
+      "family": "tip[1]",
+      "count": 1,
+      "source": "src/three/Shahed136.js::buildShahed136",
+      "geometry_or_model": {
+        "id": "geometry-5",
+        "type": "BoxGeometry",
+        "parameters": {
+          "width": 1,
+          "height": 1,
+          "depth": 1,
+          "widthSegments": 5,
+          "heightSegments": 5,
+          "depthSegments": 5
+        },
+        "vertices": 900,
+        "triangles": 300,
+        "hasNormals": true,
+        "hasUV": true
+      },
+      "material_or_texture": [
+        {
+          "id": "material-4",
+          "name": "non-emissive-identification-paint",
+          "type": "MeshStandardMaterial",
+          "color": "c1b784",
+          "roughness": 0.55,
+          "metalness": 0.03,
+          "opacity": 1,
+          "transparent": false,
+          "emissive": "000000",
+          "emissiveIntensity": 1,
+          "map": null,
+          "normalMap": null,
+          "roughnessMap": "original-fine-coating-roughness",
+          "side": 0
+        }
+      ],
+      "upgrade_or_preservation": "Existing semantic component retained;desktop high geometry,bevelled/lathed silhouettes;lower-resolution mobile geometry;sharedresources;paintmaps oncoatings,notmetallicchannels. Instanced fasteners controlled by nativeLOD.",
+      "validation": "source/CPU tested; browser pixels unverified"
+    },
+    {
+      "id": "inspector-Shahed136/fin[1][9]",
+      "family": "fin[1]",
+      "count": 1,
+      "source": "src/three/Shahed136.js::buildShahed136",
+      "geometry_or_model": {
+        "id": "geometry-6",
+        "type": "BoxGeometry",
+        "parameters": {
+          "width": 1,
+          "height": 1,
+          "depth": 1,
+          "widthSegments": 5,
+          "heightSegments": 5,
+          "depthSegments": 5
+        },
+        "vertices": 900,
+        "triangles": 300,
+        "hasNormals": true,
+        "hasUV": true
+      },
+      "material_or_texture": [
+        {
+          "id": "material-5",
+          "name": "dark-composite-trim",
+          "type": "MeshStandardMaterial",
+          "color": "343b37",
+          "roughness": 0.67,
+          "metalness": 0.16,
+          "opacity": 1,
+          "transparent": false,
+          "emissive": "000000",
+          "emissiveIntensity": 1,
+          "map": null,
+          "normalMap": null,
+          "roughnessMap": "original-fine-coating-roughness",
+          "side": 0
+        }
+      ],
+      "upgrade_or_preservation": "Existing semantic component retained;desktop high geometry,bevelled/lathed silhouettes;lower-resolution mobile geometry;sharedresources;paintmaps oncoatings,notmetallicchannels. Instanced fasteners controlled by nativeLOD.",
+      "validation": "source/CPU tested; browser pixels unverified"
+    },
+    {
+      "id": "inspector-Shahed136/hub[10]",
+      "family": "hub",
+      "count": 1,
+      "source": "src/three/Shahed136.js::buildShahed136",
+      "geometry_or_model": {
+        "id": "geometry-7",
+        "type": "CylinderGeometry",
+        "parameters": {
+          "radiusTop": 0.1,
+          "radiusBottom": 0.1,
+          "height": 0.25,
+          "radialSegments": 16,
+          "heightSegments": 1,
+          "openEnded": false,
+          "thetaStart": 0,
+          "thetaLength": 6.283185307179586
+        },
+        "vertices": 100,
+        "triangles": 64,
+        "hasNormals": true,
+        "hasUV": true
+      },
+      "material_or_texture": [
+        {
+          "id": "material-3",
+          "name": "satin-metal-fittings",
+          "type": "MeshStandardMaterial",
+          "color": "737b7e",
+          "roughness": 0.43,
+          "metalness": 0.82,
+          "opacity": 1,
+          "transparent": false,
+          "emissive": "000000",
+          "emissiveIntensity": 1,
+          "map": null,
+          "normalMap": null,
+          "roughnessMap": "original-fine-coating-roughness",
+          "side": 0
+        }
+      ],
+      "upgrade_or_preservation": "Existing semantic component retained;desktop high geometry,bevelled/lathed silhouettes;lower-resolution mobile geometry;sharedresources;paintmaps oncoatings,notmetallicchannels. Instanced fasteners controlled by nativeLOD.",
+      "validation": "source/CPU tested; browser pixels unverified"
+    },
+    {
+      "id": "inspector-Shahed136/prop[11]/blade[0][0]",
+      "family": "blade[0]",
+      "count": 1,
+      "source": "src/three/Shahed136.js::buildShahed136",
+      "geometry_or_model": {
+        "id": "geometry-8",
+        "type": "BoxGeometry",
+        "parameters": {
+          "width": 1,
+          "height": 1,
+          "depth": 1,
+          "widthSegments": 5,
+          "heightSegments": 5,
+          "depthSegments": 5
+        },
+        "vertices": 900,
+        "triangles": 300,
+        "hasNormals": true,
+        "hasUV": true
+      },
+      "material_or_texture": [
+        {
+          "id": "material-5",
+          "name": "dark-composite-trim",
+          "type": "MeshStandardMaterial",
+          "color": "343b37",
+          "roughness": 0.67,
+          "metalness": 0.16,
+          "opacity": 1,
+          "transparent": false,
+          "emissive": "000000",
+          "emissiveIntensity": 1,
+          "map": null,
+          "normalMap": null,
+          "roughnessMap": "original-fine-coating-roughness",
+          "side": 0
+        }
+      ],
+      "upgrade_or_preservation": "Existing semantic component retained;desktop high geometry,bevelled/lathed silhouettes;lower-resolution mobile geometry;sharedresources;paintmaps oncoatings,notmetallicchannels. Instanced fasteners controlled by nativeLOD.",
+      "validation": "source/CPU tested; browser pixels unverified"
+    },
+    {
+      "id": "inspector-Shahed136/prop[11]/blade[1][1]",
+      "family": "blade[1]",
+      "count": 1,
+      "source": "src/three/Shahed136.js::buildShahed136",
+      "geometry_or_model": {
+        "id": "geometry-8",
+        "type": "BoxGeometry",
+        "parameters": {
+          "width": 1,
+          "height": 1,
+          "depth": 1,
+          "widthSegments": 5,
+          "heightSegments": 5,
+          "depthSegments": 5
+        },
+        "vertices": 900,
+        "triangles": 300,
+        "hasNormals": true,
+        "hasUV": true
+      },
+      "material_or_texture": [
+        {
+          "id": "material-5",
+          "name": "dark-composite-trim",
+          "type": "MeshStandardMaterial",
+          "color": "343b37",
+          "roughness": 0.67,
+          "metalness": 0.16,
+          "opacity": 1,
+          "transparent": false,
+          "emissive": "000000",
+          "emissiveIntensity": 1,
+          "map": null,
+          "normalMap": null,
+          "roughnessMap": "original-fine-coating-roughness",
+          "side": 0
+        }
+      ],
+      "upgrade_or_preservation": "Existing semantic component retained;desktop high geometry,bevelled/lathed silhouettes;lower-resolution mobile geometry;sharedresources;paintmaps oncoatings,notmetallicchannels. Instanced fasteners controlled by nativeLOD.",
+      "validation": "source/CPU tested; browser pixels unverified"
+    },
+    {
+      "id": "inspector-Shahed136/ring[-2][12]",
+      "family": "ring[-2]",
+      "count": 1,
+      "source": "src/three/Shahed136.js::buildShahed136",
+      "geometry_or_model": {
+        "id": "geometry-9",
+        "type": "TorusGeometry",
+        "parameters": {
+          "radius": 0.412,
+          "tube": 0.0035,
+          "radialSegments": 4,
+          "tubularSegments": 32,
+          "arc": 6.283185307179586
+        },
+        "vertices": 165,
+        "triangles": 256,
+        "hasNormals": true,
+        "hasUV": true
+      },
+      "material_or_texture": [
+        {
+          "id": "material-5",
+          "name": "dark-composite-trim",
+          "type": "MeshStandardMaterial",
+          "color": "343b37",
+          "roughness": 0.67,
+          "metalness": 0.16,
+          "opacity": 1,
+          "transparent": false,
+          "emissive": "000000",
+          "emissiveIntensity": 1,
+          "map": null,
+          "normalMap": null,
+          "roughnessMap": "original-fine-coating-roughness",
+          "side": 0
+        }
+      ],
+      "upgrade_or_preservation": "Existing semantic component retained;desktop high geometry,bevelled/lathed silhouettes;lower-resolution mobile geometry;sharedresources;paintmaps oncoatings,notmetallicchannels. Instanced fasteners controlled by nativeLOD.",
+      "validation": "source/CPU tested; browser pixels unverified"
+    },
+    {
+      "id": "inspector-Shahed136/ring[-1][13]",
+      "family": "ring[-1]",
+      "count": 1,
+      "source": "src/three/Shahed136.js::buildShahed136",
+      "geometry_or_model": {
+        "id": "geometry-9",
+        "type": "TorusGeometry",
+        "parameters": {
+          "radius": 0.412,
+          "tube": 0.0035,
+          "radialSegments": 4,
+          "tubularSegments": 32,
+          "arc": 6.283185307179586
+        },
+        "vertices": 165,
+        "triangles": 256,
+        "hasNormals": true,
+        "hasUV": true
+      },
+      "material_or_texture": [
+        {
+          "id": "material-5",
+          "name": "dark-composite-trim",
+          "type": "MeshStandardMaterial",
+          "color": "343b37",
+          "roughness": 0.67,
+          "metalness": 0.16,
+          "opacity": 1,
+          "transparent": false,
+          "emissive": "000000",
+          "emissiveIntensity": 1,
+          "map": null,
+          "normalMap": null,
+          "roughnessMap": "original-fine-coating-roughness",
+          "side": 0
+        }
+      ],
+      "upgrade_or_preservation": "Existing semantic component retained;desktop high geometry,bevelled/lathed silhouettes;lower-resolution mobile geometry;sharedresources;paintmaps oncoatings,notmetallicchannels. Instanced fasteners controlled by nativeLOD.",
+      "validation": "source/CPU tested; browser pixels unverified"
+    },
+    {
+      "id": "inspector-Shahed136/ring[0][14]",
+      "family": "ring[0]",
+      "count": 1,
+      "source": "src/three/Shahed136.js::buildShahed136",
+      "geometry_or_model": {
+        "id": "geometry-9",
+        "type": "TorusGeometry",
+        "parameters": {
+          "radius": 0.412,
+          "tube": 0.0035,
+          "radialSegments": 4,
+          "tubularSegments": 32,
+          "arc": 6.283185307179586
+        },
+        "vertices": 165,
+        "triangles": 256,
+        "hasNormals": true,
+        "hasUV": true
+      },
+      "material_or_texture": [
+        {
+          "id": "material-5",
+          "name": "dark-composite-trim",
+          "type": "MeshStandardMaterial",
+          "color": "343b37",
+          "roughness": 0.67,
+          "metalness": 0.16,
+          "opacity": 1,
+          "transparent": false,
+          "emissive": "000000",
+          "emissiveIntensity": 1,
+          "map": null,
+          "normalMap": null,
+          "roughnessMap": "original-fine-coating-roughness",
+          "side": 0
+        }
+      ],
+      "upgrade_or_preservation": "Existing semantic component retained;desktop high geometry,bevelled/lathed silhouettes;lower-resolution mobile geometry;sharedresources;paintmaps oncoatings,notmetallicchannels. Instanced fasteners controlled by nativeLOD.",
+      "validation": "source/CPU tested; browser pixels unverified"
+    },
+    {
+      "id": "inspector-Shahed136/ring[1][15]",
+      "family": "ring[1]",
+      "count": 1,
+      "source": "src/three/Shahed136.js::buildShahed136",
+      "geometry_or_model": {
+        "id": "geometry-9",
+        "type": "TorusGeometry",
+        "parameters": {
+          "radius": 0.412,
+          "tube": 0.0035,
+          "radialSegments": 4,
+          "tubularSegments": 32,
+          "arc": 6.283185307179586
+        },
+        "vertices": 165,
+        "triangles": 256,
+        "hasNormals": true,
+        "hasUV": true
+      },
+      "material_or_texture": [
+        {
+          "id": "material-5",
+          "name": "dark-composite-trim",
+          "type": "MeshStandardMaterial",
+          "color": "343b37",
+          "roughness": 0.67,
+          "metalness": 0.16,
+          "opacity": 1,
+          "transparent": false,
+          "emissive": "000000",
+          "emissiveIntensity": 1,
+          "map": null,
+          "normalMap": null,
+          "roughnessMap": "original-fine-coating-roughness",
+          "side": 0
+        }
+      ],
+      "upgrade_or_preservation": "Existing semantic component retained;desktop high geometry,bevelled/lathed silhouettes;lower-resolution mobile geometry;sharedresources;paintmaps oncoatings,notmetallicchannels. Instanced fasteners controlled by nativeLOD.",
+      "validation": "source/CPU tested; browser pixels unverified"
+    },
+    {
+      "id": "inspector-Shahed136/ring[2][16]",
+      "family": "ring[2]",
+      "count": 1,
+      "source": "src/three/Shahed136.js::buildShahed136",
+      "geometry_or_model": {
+        "id": "geometry-9",
+        "type": "TorusGeometry",
+        "parameters": {
+          "radius": 0.412,
+          "tube": 0.0035,
+          "radialSegments": 4,
+          "tubularSegments": 32,
+          "arc": 6.283185307179586
+        },
+        "vertices": 165,
+        "triangles": 256,
+        "hasNormals": true,
+        "hasUV": true
+      },
+      "material_or_texture": [
+        {
+          "id": "material-5",
+          "name": "dark-composite-trim",
+          "type": "MeshStandardMaterial",
+          "color": "343b37",
+          "roughness": 0.67,
+          "metalness": 0.16,
+          "opacity": 1,
+          "transparent": false,
+          "emissive": "000000",
+          "emissiveIntensity": 1,
+          "map": null,
+          "normalMap": null,
+          "roughnessMap": "original-fine-coating-roughness",
+          "side": 0
+        }
+      ],
+      "upgrade_or_preservation": "Existing semantic component retained;desktop high geometry,bevelled/lathed silhouettes;lower-resolution mobile geometry;sharedresources;paintmaps oncoatings,notmetallicchannels. Instanced fasteners controlled by nativeLOD.",
+      "validation": "source/CPU tested; browser pixels unverified"
+    },
+    {
+      "id": "inspector-Shahed136/recognition-detail-lod[17]/panel-fasteners[0]",
+      "family": "panel-fasteners",
+      "count": 20,
+      "source": "src/three/Shahed136.js::buildShahed136",
+      "geometry_or_model": {
+        "id": "geometry-10",
+        "type": "SphereGeometry",
+        "parameters": {
+          "radius": 0.012,
+          "widthSegments": 6,
+          "heightSegments": 4,
+          "phiStart": 0,
+          "phiLength": 6.283185307179586,
+          "thetaStart": 0,
+          "thetaLength": 3.141592653589793
+        },
+        "vertices": 35,
+        "triangles": 36,
+        "hasNormals": true,
+        "hasUV": true
+      },
+      "material_or_texture": [
+        {
+          "id": "material-3",
+          "name": "satin-metal-fittings",
+          "type": "MeshStandardMaterial",
+          "color": "737b7e",
+          "roughness": 0.43,
+          "metalness": 0.82,
+          "opacity": 1,
+          "transparent": false,
+          "emissive": "000000",
+          "emissiveIntensity": 1,
+          "map": null,
+          "normalMap": null,
+          "roughnessMap": "original-fine-coating-roughness",
+          "side": 0
+        }
+      ],
+      "upgrade_or_preservation": "Existing semantic component retained;desktop high geometry,bevelled/lathed silhouettes;lower-resolution mobile geometry;sharedresources;paintmaps oncoatings,notmetallicchannels. Instanced fasteners controlled by nativeLOD.",
+      "validation": "source/CPU tested; browser pixels unverified"
+    },
+    {
+      "id": "airframe-root",
+      "family": "Recognition root, prop group and detail LOD",
+      "count": 3,
+      "source": "src/three/Shahed136.js::buildShahed136",
+      "geometry_or_model": "Group/Group/THREE.LOD(near0,far8,hysteresis.08)",
+      "material_or_texture": "Shared modelmaterials",
+      "upgrade_or_preservation": "Preserved root/prop animationAPI;added tested native LOD for only decorative20instance fasteners; no silhouette loss.",
+      "validation": "source/CPU tested; browser pixels unverified"
+    },
+    {
+      "id": "ground",
+      "family": "Existing inspector contact disc",
+      "count": 1,
+      "source": "src/three/Shahed136.js::mountShahedInspector",
+      "geometry_or_model": "Thin CylinderGeometry(3.2,3.24,.08,64) replacing zero-thicknesscircle",
+      "material_or_texture": "MeshStandardMaterial dielectricroughness.94 + user-generatedconcrete sRGB color",
+      "upgrade_or_preservation": "Chamfer-sided contact surface receives soft shadows;generatedtexture remains inabstractinspector,notgeographicterrain.",
+      "validation": "source/CPU tested; browser pixels unverified"
+    },
+    {
+      "id": "studio-lights",
+      "family": "Inspector key / rim / hemisphere fill",
+      "count": 3,
+      "source": "src/three/Shahed136.js::mountShahedInspector",
+      "geometry_or_model": "Directional/Directional/Hemisphere",
+      "material_or_texture": "Neutral studio lighting;PCFSoftShadowMap",
+      "upgrade_or_preservation": "Prior neutral key/rim/fill/shadows retained;shadow budgetchanges withquality;maximumdesktop,resolution-boundedmobile.",
+      "validation": "source/CPU tested; browser pixels unverified"
+    },
+    {
+      "id": "inspector-camera",
+      "family": "Inspector camera and orbit interaction",
+      "count": 1,
+      "source": "src/three/Shahed136.js::mountShahedInspector",
+      "geometry_or_model": "PerspectiveCamera42\u00b0,OrbitControls",
+      "material_or_texture": "No material",
+      "upgrade_or_preservation": "Original viewanddrag/zoom retained;time-basedrotation andoffscreenpause retained; no speculative cameras added.",
+      "validation": "source/CPU tested; browser pixels unverified"
+    },
+    {
+      "id": "room-1",
+      "family": "Scene/PointLight[0]",
+      "count": 1,
+      "source": "node_modules/three-stdlib/environments/RoomEnvironment.js via src/three/Shahed136.js",
+      "geometry_or_model": "PointLight",
+      "material_or_texture": [],
+      "upgrade_or_preservation": "Vendor bake-only geometry retained intentionally;CC0HDRreflectionupgrade andresource cleanup appliedcentrally,not anonscene urban model.",
+      "validation": "source/CPU tested; browser pixels unverified"
+    },
+    {
+      "id": "room-2",
+      "family": "Scene/Mesh[1]",
+      "count": 1,
+      "source": "node_modules/three-stdlib/environments/RoomEnvironment.js via src/three/Shahed136.js",
+      "geometry_or_model": {
+        "id": "geometry-0",
+        "type": "BoxGeometry",
+        "parameters": {
+          "width": 1,
+          "height": 1,
+          "depth": 1,
+          "widthSegments": 1,
+          "heightSegments": 1,
+          "depthSegments": 1
+        },
+        "vertices": 24,
+        "triangles": 12,
+        "hasNormals": true,
+        "hasUV": false
+      },
+      "material_or_texture": [
+        {
+          "id": "material-0",
+          "name": "",
+          "type": "MeshStandardMaterial",
+          "color": "ffffff",
+          "roughness": 1,
+          "metalness": 0,
+          "opacity": 1,
+          "transparent": false,
+          "emissive": "000000",
+          "emissiveIntensity": 1,
+          "map": null,
+          "normalMap": null,
+          "roughnessMap": null,
+          "side": 1
+        }
+      ],
+      "upgrade_or_preservation": "Vendor bake-only geometry retained intentionally;CC0HDRreflectionupgrade andresource cleanup appliedcentrally,not anonscene urban model.",
+      "validation": "source/CPU tested; browser pixels unverified"
+    },
+    {
+      "id": "room-3",
+      "family": "Scene/Mesh[2]",
+      "count": 1,
+      "source": "node_modules/three-stdlib/environments/RoomEnvironment.js via src/three/Shahed136.js",
+      "geometry_or_model": {
+        "id": "geometry-0",
+        "type": "BoxGeometry",
+        "parameters": {
+          "width": 1,
+          "height": 1,
+          "depth": 1,
+          "widthSegments": 1,
+          "heightSegments": 1,
+          "depthSegments": 1
+        },
+        "vertices": 24,
+        "triangles": 12,
+        "hasNormals": true,
+        "hasUV": false
+      },
+      "material_or_texture": [
+        {
+          "id": "material-1",
+          "name": "",
+          "type": "MeshStandardMaterial",
+          "color": "ffffff",
+          "roughness": 1,
+          "metalness": 0,
+          "opacity": 1,
+          "transparent": false,
+          "emissive": "000000",
+          "emissiveIntensity": 1,
+          "map": null,
+          "normalMap": null,
+          "roughnessMap": null,
+          "side": 0
+        }
+      ],
+      "upgrade_or_preservation": "Vendor bake-only geometry retained intentionally;CC0HDRreflectionupgrade andresource cleanup appliedcentrally,not anonscene urban model.",
+      "validation": "source/CPU tested; browser pixels unverified"
+    },
+    {
+      "id": "room-4",
+      "family": "Scene/Mesh[3]",
+      "count": 1,
+      "source": "node_modules/three-stdlib/environments/RoomEnvironment.js via src/three/Shahed136.js",
+      "geometry_or_model": {
+        "id": "geometry-0",
+        "type": "BoxGeometry",
+        "parameters": {
+          "width": 1,
+          "height": 1,
+          "depth": 1,
+          "widthSegments": 1,
+          "heightSegments": 1,
+          "depthSegments": 1
+        },
+        "vertices": 24,
+        "triangles": 12,
+        "hasNormals": true,
+        "hasUV": false
+      },
+      "material_or_texture": [
+        {
+          "id": "material-1",
+          "name": "",
+          "type": "MeshStandardMaterial",
+          "color": "ffffff",
+          "roughness": 1,
+          "metalness": 0,
+          "opacity": 1,
+          "transparent": false,
+          "emissive": "000000",
+          "emissiveIntensity": 1,
+          "map": null,
+          "normalMap": null,
+          "roughnessMap": null,
+          "side": 0
+        }
+      ],
+      "upgrade_or_preservation": "Vendor bake-only geometry retained intentionally;CC0HDRreflectionupgrade andresource cleanup appliedcentrally,not anonscene urban model.",
+      "validation": "source/CPU tested; browser pixels unverified"
+    },
+    {
+      "id": "room-5",
+      "family": "Scene/Mesh[4]",
+      "count": 1,
+      "source": "node_modules/three-stdlib/environments/RoomEnvironment.js via src/three/Shahed136.js",
+      "geometry_or_model": {
+        "id": "geometry-0",
+        "type": "BoxGeometry",
+        "parameters": {
+          "width": 1,
+          "height": 1,
+          "depth": 1,
+          "widthSegments": 1,
+          "heightSegments": 1,
+          "depthSegments": 1
+        },
+        "vertices": 24,
+        "triangles": 12,
+        "hasNormals": true,
+        "hasUV": false
+      },
+      "material_or_texture": [
+        {
+          "id": "material-1",
+          "name": "",
+          "type": "MeshStandardMaterial",
+          "color": "ffffff",
+          "roughness": 1,
+          "metalness": 0,
+          "opacity": 1,
+          "transparent": false,
+          "emissive": "000000",
+          "emissiveIntensity": 1,
+          "map": null,
+          "normalMap": null,
+          "roughnessMap": null,
+          "side": 0
+        }
+      ],
+      "upgrade_or_preservation": "Vendor bake-only geometry retained intentionally;CC0HDRreflectionupgrade andresource cleanup appliedcentrally,not anonscene urban model.",
+      "validation": "source/CPU tested; browser pixels unverified"
+    },
+    {
+      "id": "room-6",
+      "family": "Scene/Mesh[5]",
+      "count": 1,
+      "source": "node_modules/three-stdlib/environments/RoomEnvironment.js via src/three/Shahed136.js",
+      "geometry_or_model": {
+        "id": "geometry-0",
+        "type": "BoxGeometry",
+        "parameters": {
+          "width": 1,
+          "height": 1,
+          "depth": 1,
+          "widthSegments": 1,
+          "heightSegments": 1,
+          "depthSegments": 1
+        },
+        "vertices": 24,
+        "triangles": 12,
+        "hasNormals": true,
+        "hasUV": false
+      },
+      "material_or_texture": [
+        {
+          "id": "material-1",
+          "name": "",
+          "type": "MeshStandardMaterial",
+          "color": "ffffff",
+          "roughness": 1,
+          "metalness": 0,
+          "opacity": 1,
+          "transparent": false,
+          "emissive": "000000",
+          "emissiveIntensity": 1,
+          "map": null,
+          "normalMap": null,
+          "roughnessMap": null,
+          "side": 0
+        }
+      ],
+      "upgrade_or_preservation": "Vendor bake-only geometry retained intentionally;CC0HDRreflectionupgrade andresource cleanup appliedcentrally,not anonscene urban model.",
+      "validation": "source/CPU tested; browser pixels unverified"
+    },
+    {
+      "id": "room-7",
+      "family": "Scene/Mesh[6]",
+      "count": 1,
+      "source": "node_modules/three-stdlib/environments/RoomEnvironment.js via src/three/Shahed136.js",
+      "geometry_or_model": {
+        "id": "geometry-0",
+        "type": "BoxGeometry",
+        "parameters": {
+          "width": 1,
+          "height": 1,
+          "depth": 1,
+          "widthSegments": 1,
+          "heightSegments": 1,
+          "depthSegments": 1
+        },
+        "vertices": 24,
+        "triangles": 12,
+        "hasNormals": true,
+        "hasUV": false
+      },
+      "material_or_texture": [
+        {
+          "id": "material-1",
+          "name": "",
+          "type": "MeshStandardMaterial",
+          "color": "ffffff",
+          "roughness": 1,
+          "metalness": 0,
+          "opacity": 1,
+          "transparent": false,
+          "emissive": "000000",
+          "emissiveIntensity": 1,
+          "map": null,
+          "normalMap": null,
+          "roughnessMap": null,
+          "side": 0
+        }
+      ],
+      "upgrade_or_preservation": "Vendor bake-only geometry retained intentionally;CC0HDRreflectionupgrade andresource cleanup appliedcentrally,not anonscene urban model.",
+      "validation": "source/CPU tested; browser pixels unverified"
+    },
+    {
+      "id": "room-8",
+      "family": "Scene/Mesh[7]",
+      "count": 1,
+      "source": "node_modules/three-stdlib/environments/RoomEnvironment.js via src/three/Shahed136.js",
+      "geometry_or_model": {
+        "id": "geometry-0",
+        "type": "BoxGeometry",
+        "parameters": {
+          "width": 1,
+          "height": 1,
+          "depth": 1,
+          "widthSegments": 1,
+          "heightSegments": 1,
+          "depthSegments": 1
+        },
+        "vertices": 24,
+        "triangles": 12,
+        "hasNormals": true,
+        "hasUV": false
+      },
+      "material_or_texture": [
+        {
+          "id": "material-1",
+          "name": "",
+          "type": "MeshStandardMaterial",
+          "color": "ffffff",
+          "roughness": 1,
+          "metalness": 0,
+          "opacity": 1,
+          "transparent": false,
+          "emissive": "000000",
+          "emissiveIntensity": 1,
+          "map": null,
+          "normalMap": null,
+          "roughnessMap": null,
+          "side": 0
+        }
+      ],
+      "upgrade_or_preservation": "Vendor bake-only geometry retained intentionally;CC0HDRreflectionupgrade andresource cleanup appliedcentrally,not anonscene urban model.",
+      "validation": "source/CPU tested; browser pixels unverified"
+    },
+    {
+      "id": "room-9",
+      "family": "Scene/Mesh[8]",
+      "count": 1,
+      "source": "node_modules/three-stdlib/environments/RoomEnvironment.js via src/three/Shahed136.js",
+      "geometry_or_model": {
+        "id": "geometry-0",
+        "type": "BoxGeometry",
+        "parameters": {
+          "width": 1,
+          "height": 1,
+          "depth": 1,
+          "widthSegments": 1,
+          "heightSegments": 1,
+          "depthSegments": 1
+        },
+        "vertices": 24,
+        "triangles": 12,
+        "hasNormals": true,
+        "hasUV": false
+      },
+      "material_or_texture": [
+        {
+          "id": "material-2",
+          "name": "",
+          "type": "MeshBasicMaterial",
+          "color": "ffffff",
+          "opacity": 1,
+          "transparent": false,
+          "map": null,
+          "normalMap": null,
+          "roughnessMap": null,
+          "side": 0
+        }
+      ],
+      "upgrade_or_preservation": "Vendor bake-only geometry retained intentionally;CC0HDRreflectionupgrade andresource cleanup appliedcentrally,not anonscene urban model.",
+      "validation": "source/CPU tested; browser pixels unverified"
+    },
+    {
+      "id": "room-10",
+      "family": "Scene/Mesh[9]",
+      "count": 1,
+      "source": "node_modules/three-stdlib/environments/RoomEnvironment.js via src/three/Shahed136.js",
+      "geometry_or_model": {
+        "id": "geometry-0",
+        "type": "BoxGeometry",
+        "parameters": {
+          "width": 1,
+          "height": 1,
+          "depth": 1,
+          "widthSegments": 1,
+          "heightSegments": 1,
+          "depthSegments": 1
+        },
+        "vertices": 24,
+        "triangles": 12,
+        "hasNormals": true,
+        "hasUV": false
+      },
+      "material_or_texture": [
+        {
+          "id": "material-3",
+          "name": "",
+          "type": "MeshBasicMaterial",
+          "color": "ffffff",
+          "opacity": 1,
+          "transparent": false,
+          "map": null,
+          "normalMap": null,
+          "roughnessMap": null,
+          "side": 0
+        }
+      ],
+      "upgrade_or_preservation": "Vendor bake-only geometry retained intentionally;CC0HDRreflectionupgrade andresource cleanup appliedcentrally,not anonscene urban model.",
+      "validation": "source/CPU tested; browser pixels unverified"
+    },
+    {
+      "id": "room-11",
+      "family": "Scene/Mesh[10]",
+      "count": 1,
+      "source": "node_modules/three-stdlib/environments/RoomEnvironment.js via src/three/Shahed136.js",
+      "geometry_or_model": {
+        "id": "geometry-0",
+        "type": "BoxGeometry",
+        "parameters": {
+          "width": 1,
+          "height": 1,
+          "depth": 1,
+          "widthSegments": 1,
+          "heightSegments": 1,
+          "depthSegments": 1
+        },
+        "vertices": 24,
+        "triangles": 12,
+        "hasNormals": true,
+        "hasUV": false
+      },
+      "material_or_texture": [
+        {
+          "id": "material-4",
+          "name": "",
+          "type": "MeshBasicMaterial",
+          "color": "ffffff",
+          "opacity": 1,
+          "transparent": false,
+          "map": null,
+          "normalMap": null,
+          "roughnessMap": null,
+          "side": 0
+        }
+      ],
+      "upgrade_or_preservation": "Vendor bake-only geometry retained intentionally;CC0HDRreflectionupgrade andresource cleanup appliedcentrally,not anonscene urban model.",
+      "validation": "source/CPU tested; browser pixels unverified"
+    },
+    {
+      "id": "room-12",
+      "family": "Scene/Mesh[11]",
+      "count": 1,
+      "source": "node_modules/three-stdlib/environments/RoomEnvironment.js via src/three/Shahed136.js",
+      "geometry_or_model": {
+        "id": "geometry-0",
+        "type": "BoxGeometry",
+        "parameters": {
+          "width": 1,
+          "height": 1,
+          "depth": 1,
+          "widthSegments": 1,
+          "heightSegments": 1,
+          "depthSegments": 1
+        },
+        "vertices": 24,
+        "triangles": 12,
+        "hasNormals": true,
+        "hasUV": false
+      },
+      "material_or_texture": [
+        {
+          "id": "material-5",
+          "name": "",
+          "type": "MeshBasicMaterial",
+          "color": "ffffff",
+          "opacity": 1,
+          "transparent": false,
+          "map": null,
+          "normalMap": null,
+          "roughnessMap": null,
+          "side": 0
+        }
+      ],
+      "upgrade_or_preservation": "Vendor bake-only geometry retained intentionally;CC0HDRreflectionupgrade andresource cleanup appliedcentrally,not anonscene urban model.",
+      "validation": "source/CPU tested; browser pixels unverified"
+    },
+    {
+      "id": "room-13",
+      "family": "Scene/Mesh[12]",
+      "count": 1,
+      "source": "node_modules/three-stdlib/environments/RoomEnvironment.js via src/three/Shahed136.js",
+      "geometry_or_model": {
+        "id": "geometry-0",
+        "type": "BoxGeometry",
+        "parameters": {
+          "width": 1,
+          "height": 1,
+          "depth": 1,
+          "widthSegments": 1,
+          "heightSegments": 1,
+          "depthSegments": 1
+        },
+        "vertices": 24,
+        "triangles": 12,
+        "hasNormals": true,
+        "hasUV": false
+      },
+      "material_or_texture": [
+        {
+          "id": "material-6",
+          "name": "",
+          "type": "MeshBasicMaterial",
+          "color": "ffffff",
+          "opacity": 1,
+          "transparent": false,
+          "map": null,
+          "normalMap": null,
+          "roughnessMap": null,
+          "side": 0
+        }
+      ],
+      "upgrade_or_preservation": "Vendor bake-only geometry retained intentionally;CC0HDRreflectionupgrade andresource cleanup appliedcentrally,not anonscene urban model.",
+      "validation": "source/CPU tested; browser pixels unverified"
+    },
+    {
+      "id": "room-14",
+      "family": "Scene/Mesh[13]",
+      "count": 1,
+      "source": "node_modules/three-stdlib/environments/RoomEnvironment.js via src/three/Shahed136.js",
+      "geometry_or_model": {
+        "id": "geometry-0",
+        "type": "BoxGeometry",
+        "parameters": {
+          "width": 1,
+          "height": 1,
+          "depth": 1,
+          "widthSegments": 1,
+          "heightSegments": 1,
+          "depthSegments": 1
+        },
+        "vertices": 24,
+        "triangles": 12,
+        "hasNormals": true,
+        "hasUV": false
+      },
+      "material_or_texture": [
+        {
+          "id": "material-7",
+          "name": "",
+          "type": "MeshBasicMaterial",
+          "color": "ffffff",
+          "opacity": 1,
+          "transparent": false,
+          "map": null,
+          "normalMap": null,
+          "roughnessMap": null,
+          "side": 0
+        }
+      ],
+      "upgrade_or_preservation": "Vendor bake-only geometry retained intentionally;CC0HDRreflectionupgrade andresource cleanup appliedcentrally,not anonscene urban model.",
+      "validation": "source/CPU tested; browser pixels unverified"
+    },
+    {
+      "id": "environment",
+      "family": "Generated PMREM fallback / CC0 studio HDR",
+      "count": 1,
+      "source": "src/three/Shahed136.js;public/environments/studio-small-09-1k.hdr",
+      "geometry_or_model": "RoomEnvironment PMREM;RGBELoader",
+      "material_or_texture": "Verified1KCC0StudioSmall09",
+      "upgrade_or_preservation": "Retained prior verified asset;lazyvisibleonly,HDRskippedmobile,completecleanup.",
+      "validation": "source/CPU tested; browser pixels unverified"
+    },
+    {
+      "id": "effect-Flash billboard",
+      "family": "Flash billboard",
+      "count": 1,
+      "source": "src/cesium/CesiumScene.js::_fireImpact/_spawnImpactParticles",
+      "geometry_or_model": "200px radial PNG",
+      "material_or_texture": "Existing particle PNG / generated radial fallback / simple color",
+      "upgrade_or_preservation": "Prior restrained screen-space cues,quality-scaled counts,loop=false,display-time clock andcleanup retained;synthetic soot input not treated asphysicaldamage.",
+      "validation": "source/CPU tested; browser pixels unverified"
+    },
+    {
+      "id": "effect-Ground flash",
+      "family": "Ground flash",
+      "count": 1,
+      "source": "src/cesium/CesiumScene.js::_fireImpact/_spawnImpactParticles",
+      "geometry_or_model": "Ellipse + point",
+      "material_or_texture": "Existing particle PNG / generated radial fallback / simple color",
+      "upgrade_or_preservation": "Prior restrained screen-space cues,quality-scaled counts,loop=false,display-time clock andcleanup retained;synthetic soot input not treated asphysicaldamage.",
+      "validation": "source/CPU tested; browser pixels unverified"
+    },
+    {
+      "id": "effect-Shockwave outline",
+      "family": "Shockwave outline",
+      "count": 1,
+      "source": "src/cesium/CesiumScene.js::_fireImpact/_spawnImpactParticles",
+      "geometry_or_model": "Ellipse outline",
+      "material_or_texture": "Existing particle PNG / generated radial fallback / simple color",
+      "upgrade_or_preservation": "Prior restrained screen-space cues,quality-scaled counts,loop=false,display-time clock andcleanup retained;synthetic soot input not treated asphysicaldamage.",
+      "validation": "source/CPU tested; browser pixels unverified"
+    },
+    {
+      "id": "effect-Fireball particles",
+      "family": "Fireball particles",
+      "count": 1,
+      "source": "src/cesium/CesiumScene.js::_fireImpact/_spawnImpactParticles",
+      "geometry_or_model": "SphereEmitter",
+      "material_or_texture": "Existing particle PNG / generated radial fallback / simple color",
+      "upgrade_or_preservation": "Prior restrained screen-space cues,quality-scaled counts,loop=false,display-time clock andcleanup retained;synthetic soot input not treated asphysicaldamage.",
+      "validation": "source/CPU tested; browser pixels unverified"
+    },
+    {
+      "id": "effect-Smoke particles",
+      "family": "Smoke particles",
+      "count": 1,
+      "source": "src/cesium/CesiumScene.js::_fireImpact/_spawnImpactParticles",
+      "geometry_or_model": "CircleEmitter",
+      "material_or_texture": "Existing particle PNG / generated radial fallback / simple color",
+      "upgrade_or_preservation": "Prior restrained screen-space cues,quality-scaled counts,loop=false,display-time clock andcleanup retained;synthetic soot input not treated asphysicaldamage.",
+      "validation": "source/CPU tested; browser pixels unverified"
+    },
+    {
+      "id": "effect-Debris particles",
+      "family": "Debris particles",
+      "count": 1,
+      "source": "src/cesium/CesiumScene.js::_fireImpact/_spawnImpactParticles",
+      "geometry_or_model": "ConeEmitter",
+      "material_or_texture": "Existing particle PNG / generated radial fallback / simple color",
+      "upgrade_or_preservation": "Prior restrained screen-space cues,quality-scaled counts,loop=false,display-time clock andcleanup retained;synthetic soot input not treated asphysicaldamage.",
+      "validation": "source/CPU tested; browser pixels unverified"
+    },
+    {
+      "id": "geocamera",
+      "family": "Eight geospatial camera modes + internal waypoint mode",
+      "count": 9,
+      "source": "src/cesium/CesiumScene.js::setCamMode/_driveCamera;src/data/scenario.js::CAMERA_MODES",
+      "geometry_or_model": "Cesium PerspectiveFrustum + existingcontroller",
+      "material_or_texture": "No material",
+      "upgrade_or_preservation": "Allnames,framingdestinations,controls andmath preserved. CPUregression tests covereach mode;browsermotion notcertified.",
+      "validation": "source/CPU tested; browser pixels unverified"
+    },
+    {
+      "id": "legacy",
+      "family": "Legacy unreachable visual panel/presets",
+      "count": 2,
+      "source": "src/three/VisualControlPanel.js;src/three/visualPresets.js",
+      "geometry_or_model": "Not constructed from activeApp imports",
+      "material_or_texture": "Inactiveconfiguration only",
+      "upgrade_or_preservation": "Kept untouched;missinglil-gui not installed. Nativequalityselector is the activeproductioncontrol.",
+      "validation": "reviewed inactive,not falsely counted asrendered"
+    }
+  ],
+  "cpu_details": {
+    "timestamp": "2026-09-05T05:48:31.531Z",
+    "airframe": {
+      "objects": [
+        {
+          "path": "Shahed136",
+          "name": "Shahed136",
+          "type": "Group",
+          "instanced": false,
+          "count": 1,
+          "position": [
+            0,
+            0,
+            0
+          ],
+          "rotation": [
+            0,
+            0,
+            0
+          ],
+          "scale": [
+            0.5,
+            0.5,
+            0.5
+          ],
+          "visible": true,
+          "castShadow": false,
+          "receiveShadow": false,
+          "geometry": null,
+          "materials": []
+        },
+        {
+          "path": "Shahed136/fuse[0]",
+          "name": "fuse",
+          "type": "Mesh",
+          "instanced": false,
+          "count": 1,
+          "position": [
+            0,
+            0,
+            0
+          ],
+          "rotation": [
+            1.5707963267948966,
+            0,
+            0
+          ],
+          "scale": [
+            1,
+            1,
+            1
+          ],
+          "visible": true,
+          "castShadow": true,
+          "receiveShadow": true,
+          "geometry": {
+            "id": "geometry-0",
+            "type": "LatheGeometry",
+            "parameters": {
+              "points": [
+                {
+                  "x": 0.3,
+                  "y": -2.75
+                },
+                {
+                  "x": 0.36,
+                  "y": -2.6
+                },
+                {
+                  "x": 0.39,
+                  "y": -2.1
+                },
+                {
+                  "x": 0.41,
+                  "y": -0.8
+                },
+                {
+                  "x": 0.43,
+                  "y": 1.5
+                },
+                {
+                  "x": 0.4,
+                  "y": 2.65
+                },
+                {
+                  "x": 0.34,
+                  "y": 2.8
+                }
+              ],
+              "segments": 40,
+              "phiStart": 0,
+              "phiLength": 6.283185307179586
+            },
+            "vertices": 287,
+            "triangles": 480,
+            "hasNormals": true,
+            "hasUV": true
+          },
+          "materials": [
+            {
+              "id": "material-0",
+              "name": "matte-painted-composite",
+              "type": "MeshStandardMaterial",
+              "color": "b6b8a5",
+              "roughness": 0.64,
+              "metalness": 0.02,
+              "opacity": 1,
+              "transparent": false,
+              "emissive": "000000",
+              "emissiveIntensity": 1,
+              "map": null,
+              "normalMap": "original-fine-coating-normal",
+              "roughnessMap": "original-fine-coating-roughness",
+              "side": 0
+            }
+          ]
+        },
+        {
+          "path": "Shahed136/nose[1]",
+          "name": "nose",
+          "type": "Mesh",
+          "instanced": false,
+          "count": 1,
+          "position": [
+            0,
+            0,
+            -2.75
+          ],
+          "rotation": [
+            1.5707963267948966,
+            0,
+            0
+          ],
+          "scale": [
+            1,
+            1,
+            1
+          ],
+          "visible": true,
+          "castShadow": true,
+          "receiveShadow": true,
+          "geometry": {
+            "id": "geometry-1",
+            "type": "LatheGeometry",
+            "parameters": {
+              "points": [
+                {
+                  "x": 0,
+                  "y": -1.35
+                },
+                {
+                  "x": 0.08,
+                  "y": -1.18
+                },
+                {
+                  "x": 0.2,
+                  "y": -0.7
+                },
+                {
+                  "x": 0.3,
+                  "y": -0.18
+                },
+                {
+                  "x": 0.3,
+                  "y": 0
+                }
+              ],
+              "segments": 40,
+              "phiStart": 0,
+              "phiLength": 6.283185307179586
+            },
+            "vertices": 205,
+            "triangles": 320,
+            "hasNormals": true,
+            "hasUV": true
+          },
+          "materials": [
+            {
+              "id": "material-1",
+              "name": "painted-nose-cover",
+              "type": "MeshStandardMaterial",
+              "color": "838779",
+              "roughness": 0.57,
+              "metalness": 0.01,
+              "opacity": 1,
+              "transparent": false,
+              "emissive": "000000",
+              "emissiveIntensity": 1,
+              "map": null,
+              "normalMap": "original-fine-coating-normal",
+              "roughnessMap": "original-fine-coating-roughness",
+              "side": 0
+            }
+          ]
+        },
+        {
+          "path": "Shahed136/eo[2]",
+          "name": "eo",
+          "type": "Mesh",
+          "instanced": false,
+          "count": 1,
+          "position": [
+            0,
+            -0.33,
+            -2.38
+          ],
+          "rotation": [
+            0,
+            0,
+            0
+          ],
+          "scale": [
+            1,
+            1,
+            1
+          ],
+          "visible": true,
+          "castShadow": true,
+          "receiveShadow": true,
+          "geometry": {
+            "id": "geometry-2",
+            "type": "SphereGeometry",
+            "parameters": {
+              "radius": 0.23,
+              "widthSegments": 28,
+              "heightSegments": 18,
+              "phiStart": 0,
+              "phiLength": 6.283185307179586,
+              "thetaStart": 0,
+              "thetaLength": 3.141592653589793
+            },
+            "vertices": 551,
+            "triangles": 952,
+            "hasNormals": true,
+            "hasUV": true
+          },
+          "materials": [
+            {
+              "id": "material-2",
+              "name": "dark-optical-cover",
+              "type": "MeshPhysicalMaterial",
+              "color": "101e22",
+              "roughness": 0.09,
+              "metalness": 0,
+              "opacity": 1,
+              "transparent": false,
+              "emissive": "000000",
+              "emissiveIntensity": 1,
+              "clearcoat": 1,
+              "map": null,
+              "normalMap": null,
+              "roughnessMap": null,
+              "side": 0
+            }
+          ]
+        },
+        {
+          "path": "Shahed136/tailCap[3]",
+          "name": "tailCap",
+          "type": "Mesh",
+          "instanced": false,
+          "count": 1,
+          "position": [
+            0,
+            0,
+            2.95
+          ],
+          "rotation": [
+            1.5707963267948966,
+            0,
+            0
+          ],
+          "scale": [
+            1,
+            1,
+            1
+          ],
+          "visible": true,
+          "castShadow": true,
+          "receiveShadow": true,
+          "geometry": {
+            "id": "geometry-3",
+            "type": "CylinderGeometry",
+            "parameters": {
+              "radiusTop": 0.34,
+              "radiusBottom": 0.28,
+              "height": 0.44,
+              "radialSegments": 40,
+              "heightSegments": 1,
+              "openEnded": false,
+              "thetaStart": 0,
+              "thetaLength": 6.283185307179586
+            },
+            "vertices": 244,
+            "triangles": 160,
+            "hasNormals": true,
+            "hasUV": true
+          },
+          "materials": [
+            {
+              "id": "material-3",
+              "name": "satin-metal-fittings",
+              "type": "MeshStandardMaterial",
+              "color": "737b7e",
+              "roughness": 0.43,
+              "metalness": 0.82,
+              "opacity": 1,
+              "transparent": false,
+              "emissive": "000000",
+              "emissiveIntensity": 1,
+              "map": null,
+              "normalMap": null,
+              "roughnessMap": "original-fine-coating-roughness",
+              "side": 0
+            }
+          ]
+        },
+        {
+          "path": "Shahed136/wingR[4]",
+          "name": "wingR",
+          "type": "Mesh",
+          "instanced": false,
+          "count": 1,
+          "position": [
+            0,
+            0.02,
+            0.3
+          ],
+          "rotation": [
+            -1.5707963267948966,
+            0,
+            0
+          ],
+          "scale": [
+            1,
+            1,
+            1
+          ],
+          "visible": true,
+          "castShadow": true,
+          "receiveShadow": true,
+          "geometry": {
+            "id": "geometry-4",
+            "type": "ExtrudeGeometry",
+            "parameters": {
+              "options": {
+                "steps": 1,
+                "depth": 0.065,
+                "bevelEnabled": true,
+                "bevelThickness": 0.015,
+                "bevelSize": 0.025,
+                "bevelSegments": 2,
+                "curveSegments": 1
+              }
+            },
+            "vertices": 96,
+            "triangles": 32,
+            "hasNormals": true,
+            "hasUV": true
+          },
+          "materials": [
+            {
+              "id": "material-0",
+              "name": "matte-painted-composite",
+              "type": "MeshStandardMaterial",
+              "color": "b6b8a5",
+              "roughness": 0.64,
+              "metalness": 0.02,
+              "opacity": 1,
+              "transparent": false,
+              "emissive": "000000",
+              "emissiveIntensity": 1,
+              "map": null,
+              "normalMap": "original-fine-coating-normal",
+              "roughnessMap": "original-fine-coating-roughness",
+              "side": 0
+            }
+          ]
+        },
+        {
+          "path": "Shahed136/wingL[5]",
+          "name": "wingL",
+          "type": "Mesh",
+          "instanced": false,
+          "count": 1,
+          "position": [
+            0,
+            0.02,
+            0.3
+          ],
+          "rotation": [
+            -1.5707963267948963,
+            0,
+            0
+          ],
+          "scale": [
+            -1,
+            1,
+            1
+          ],
+          "visible": true,
+          "castShadow": true,
+          "receiveShadow": true,
+          "geometry": {
+            "id": "geometry-4",
+            "type": "ExtrudeGeometry",
+            "parameters": {
+              "options": {
+                "steps": 1,
+                "depth": 0.065,
+                "bevelEnabled": true,
+                "bevelThickness": 0.015,
+                "bevelSize": 0.025,
+                "bevelSegments": 2,
+                "curveSegments": 1
+              }
+            },
+            "vertices": 96,
+            "triangles": 32,
+            "hasNormals": true,
+            "hasUV": true
+          },
+          "materials": [
+            {
+              "id": "material-0",
+              "name": "matte-painted-composite",
+              "type": "MeshStandardMaterial",
+              "color": "b6b8a5",
+              "roughness": 0.64,
+              "metalness": 0.02,
+              "opacity": 1,
+              "transparent": false,
+              "emissive": "000000",
+              "emissiveIntensity": 1,
+              "map": null,
+              "normalMap": "original-fine-coating-normal",
+              "roughnessMap": "original-fine-coating-roughness",
+              "side": 0
+            }
+          ]
+        },
+        {
+          "path": "Shahed136/tip[-1][6]",
+          "name": "tip[-1]",
+          "type": "Mesh",
+          "instanced": false,
+          "count": 1,
+          "position": [
+            -2.54,
+            0.03,
+            1.6
+          ],
+          "rotation": [
+            0,
+            -0.12,
+            0
+          ],
+          "scale": [
+            1,
+            1,
+            1
+          ],
+          "visible": true,
+          "castShadow": true,
+          "receiveShadow": true,
+          "geometry": {
+            "id": "geometry-5",
+            "type": "BoxGeometry",
+            "parameters": {
+              "width": 1,
+              "height": 1,
+              "depth": 1,
+              "widthSegments": 5,
+              "heightSegments": 5,
+              "depthSegments": 5
+            },
+            "vertices": 900,
+            "triangles": 300,
+            "hasNormals": true,
+            "hasUV": true
+          },
+          "materials": [
+            {
+              "id": "material-4",
+              "name": "non-emissive-identification-paint",
+              "type": "MeshStandardMaterial",
+              "color": "c1b784",
+              "roughness": 0.55,
+              "metalness": 0.03,
+              "opacity": 1,
+              "transparent": false,
+              "emissive": "000000",
+              "emissiveIntensity": 1,
+              "map": null,
+              "normalMap": null,
+              "roughnessMap": "original-fine-coating-roughness",
+              "side": 0
+            }
+          ]
+        },
+        {
+          "path": "Shahed136/fin[-1][7]",
+          "name": "fin[-1]",
+          "type": "Mesh",
+          "instanced": false,
+          "count": 1,
+          "position": [
+            -0.34,
+            0.29,
+            2.57
+          ],
+          "rotation": [
+            0,
+            0,
+            -0.55
+          ],
+          "scale": [
+            1,
+            1,
+            1
+          ],
+          "visible": true,
+          "castShadow": true,
+          "receiveShadow": true,
+          "geometry": {
+            "id": "geometry-6",
+            "type": "BoxGeometry",
+            "parameters": {
+              "width": 1,
+              "height": 1,
+              "depth": 1,
+              "widthSegments": 5,
+              "heightSegments": 5,
+              "depthSegments": 5
+            },
+            "vertices": 900,
+            "triangles": 300,
+            "hasNormals": true,
+            "hasUV": true
+          },
+          "materials": [
+            {
+              "id": "material-5",
+              "name": "dark-composite-trim",
+              "type": "MeshStandardMaterial",
+              "color": "343b37",
+              "roughness": 0.67,
+              "metalness": 0.16,
+              "opacity": 1,
+              "transparent": false,
+              "emissive": "000000",
+              "emissiveIntensity": 1,
+              "map": null,
+              "normalMap": null,
+              "roughnessMap": "original-fine-coating-roughness",
+              "side": 0
+            }
+          ]
+        },
+        {
+          "path": "Shahed136/tip[1][8]",
+          "name": "tip[1]",
+          "type": "Mesh",
+          "instanced": false,
+          "count": 1,
+          "position": [
+            2.54,
+            0.03,
+            1.6
+          ],
+          "rotation": [
+            0,
+            0.12,
+            0
+          ],
+          "scale": [
+            1,
+            1,
+            1
+          ],
+          "visible": true,
+          "castShadow": true,
+          "receiveShadow": true,
+          "geometry": {
+            "id": "geometry-5",
+            "type": "BoxGeometry",
+            "parameters": {
+              "width": 1,
+              "height": 1,
+              "depth": 1,
+              "widthSegments": 5,
+              "heightSegments": 5,
+              "depthSegments": 5
+            },
+            "vertices": 900,
+            "triangles": 300,
+            "hasNormals": true,
+            "hasUV": true
+          },
+          "materials": [
+            {
+              "id": "material-4",
+              "name": "non-emissive-identification-paint",
+              "type": "MeshStandardMaterial",
+              "color": "c1b784",
+              "roughness": 0.55,
+              "metalness": 0.03,
+              "opacity": 1,
+              "transparent": false,
+              "emissive": "000000",
+              "emissiveIntensity": 1,
+              "map": null,
+              "normalMap": null,
+              "roughnessMap": "original-fine-coating-roughness",
+              "side": 0
+            }
+          ]
+        },
+        {
+          "path": "Shahed136/fin[1][9]",
+          "name": "fin[1]",
+          "type": "Mesh",
+          "instanced": false,
+          "count": 1,
+          "position": [
+            0.34,
+            0.29,
+            2.57
+          ],
+          "rotation": [
+            0,
+            0,
+            0.55
+          ],
+          "scale": [
+            1,
+            1,
+            1
+          ],
+          "visible": true,
+          "castShadow": true,
+          "receiveShadow": true,
+          "geometry": {
+            "id": "geometry-6",
+            "type": "BoxGeometry",
+            "parameters": {
+              "width": 1,
+              "height": 1,
+              "depth": 1,
+              "widthSegments": 5,
+              "heightSegments": 5,
+              "depthSegments": 5
+            },
+            "vertices": 900,
+            "triangles": 300,
+            "hasNormals": true,
+            "hasUV": true
+          },
+          "materials": [
+            {
+              "id": "material-5",
+              "name": "dark-composite-trim",
+              "type": "MeshStandardMaterial",
+              "color": "343b37",
+              "roughness": 0.67,
+              "metalness": 0.16,
+              "opacity": 1,
+              "transparent": false,
+              "emissive": "000000",
+              "emissiveIntensity": 1,
+              "map": null,
+              "normalMap": null,
+              "roughnessMap": "original-fine-coating-roughness",
+              "side": 0
+            }
+          ]
+        },
+        {
+          "path": "Shahed136/hub[10]",
+          "name": "hub",
+          "type": "Mesh",
+          "instanced": false,
+          "count": 1,
+          "position": [
+            0,
+            0,
+            3.25
+          ],
+          "rotation": [
+            1.5707963267948966,
+            0,
+            0
+          ],
+          "scale": [
+            1,
+            1,
+            1
+          ],
+          "visible": true,
+          "castShadow": true,
+          "receiveShadow": true,
+          "geometry": {
+            "id": "geometry-7",
+            "type": "CylinderGeometry",
+            "parameters": {
+              "radiusTop": 0.1,
+              "radiusBottom": 0.1,
+              "height": 0.25,
+              "radialSegments": 16,
+              "heightSegments": 1,
+              "openEnded": false,
+              "thetaStart": 0,
+              "thetaLength": 6.283185307179586
+            },
+            "vertices": 100,
+            "triangles": 64,
+            "hasNormals": true,
+            "hasUV": true
+          },
+          "materials": [
+            {
+              "id": "material-3",
+              "name": "satin-metal-fittings",
+              "type": "MeshStandardMaterial",
+              "color": "737b7e",
+              "roughness": 0.43,
+              "metalness": 0.82,
+              "opacity": 1,
+              "transparent": false,
+              "emissive": "000000",
+              "emissiveIntensity": 1,
+              "map": null,
+              "normalMap": null,
+              "roughnessMap": "original-fine-coating-roughness",
+              "side": 0
+            }
+          ]
+        },
+        {
+          "path": "Shahed136/prop[11]",
+          "name": "prop",
+          "type": "Group",
+          "instanced": false,
+          "count": 1,
+          "position": [
+            0,
+            0,
+            3.4
+          ],
+          "rotation": [
+            0,
+            0,
+            0
+          ],
+          "scale": [
+            1,
+            1,
+            1
+          ],
+          "visible": true,
+          "castShadow": false,
+          "receiveShadow": false,
+          "geometry": null,
+          "materials": []
+        },
+        {
+          "path": "Shahed136/prop[11]/blade[0][0]",
+          "name": "blade[0]",
+          "type": "Mesh",
+          "instanced": false,
+          "count": 1,
+          "position": [
+            0,
+            0,
+            0
+          ],
+          "rotation": [
+            0,
+            0,
+            0
+          ],
+          "scale": [
+            1,
+            1,
+            1
+          ],
+          "visible": true,
+          "castShadow": true,
+          "receiveShadow": true,
+          "geometry": {
+            "id": "geometry-8",
+            "type": "BoxGeometry",
+            "parameters": {
+              "width": 1,
+              "height": 1,
+              "depth": 1,
+              "widthSegments": 5,
+              "heightSegments": 5,
+              "depthSegments": 5
+            },
+            "vertices": 900,
+            "triangles": 300,
+            "hasNormals": true,
+            "hasUV": true
+          },
+          "materials": [
+            {
+              "id": "material-5",
+              "name": "dark-composite-trim",
+              "type": "MeshStandardMaterial",
+              "color": "343b37",
+              "roughness": 0.67,
+              "metalness": 0.16,
+              "opacity": 1,
+              "transparent": false,
+              "emissive": "000000",
+              "emissiveIntensity": 1,
+              "map": null,
+              "normalMap": null,
+              "roughnessMap": "original-fine-coating-roughness",
+              "side": 0
+            }
+          ]
+        },
+        {
+          "path": "Shahed136/prop[11]/blade[1][1]",
+          "name": "blade[1]",
+          "type": "Mesh",
+          "instanced": false,
+          "count": 1,
+          "position": [
+            0,
+            0,
+            0
+          ],
+          "rotation": [
+            0,
+            0,
+            1.5707963267948966
+          ],
+          "scale": [
+            1,
+            1,
+            1
+          ],
+          "visible": true,
+          "castShadow": true,
+          "receiveShadow": true,
+          "geometry": {
+            "id": "geometry-8",
+            "type": "BoxGeometry",
+            "parameters": {
+              "width": 1,
+              "height": 1,
+              "depth": 1,
+              "widthSegments": 5,
+              "heightSegments": 5,
+              "depthSegments": 5
+            },
+            "vertices": 900,
+            "triangles": 300,
+            "hasNormals": true,
+            "hasUV": true
+          },
+          "materials": [
+            {
+              "id": "material-5",
+              "name": "dark-composite-trim",
+              "type": "MeshStandardMaterial",
+              "color": "343b37",
+              "roughness": 0.67,
+              "metalness": 0.16,
+              "opacity": 1,
+              "transparent": false,
+              "emissive": "000000",
+              "emissiveIntensity": 1,
+              "map": null,
+              "normalMap": null,
+              "roughnessMap": "original-fine-coating-roughness",
+              "side": 0
+            }
+          ]
+        },
+        {
+          "path": "Shahed136/ring[-2][12]",
+          "name": "ring[-2]",
+          "type": "Mesh",
+          "instanced": false,
+          "count": 1,
+          "position": [
+            0,
+            0,
+            -1.8
+          ],
+          "rotation": [
+            0,
+            0,
+            0
+          ],
+          "scale": [
+            1,
+            1,
+            1
+          ],
+          "visible": true,
+          "castShadow": true,
+          "receiveShadow": true,
+          "geometry": {
+            "id": "geometry-9",
+            "type": "TorusGeometry",
+            "parameters": {
+              "radius": 0.412,
+              "tube": 0.0035,
+              "radialSegments": 4,
+              "tubularSegments": 32,
+              "arc": 6.283185307179586
+            },
+            "vertices": 165,
+            "triangles": 256,
+            "hasNormals": true,
+            "hasUV": true
+          },
+          "materials": [
+            {
+              "id": "material-5",
+              "name": "dark-composite-trim",
+              "type": "MeshStandardMaterial",
+              "color": "343b37",
+              "roughness": 0.67,
+              "metalness": 0.16,
+              "opacity": 1,
+              "transparent": false,
+              "emissive": "000000",
+              "emissiveIntensity": 1,
+              "map": null,
+              "normalMap": null,
+              "roughnessMap": "original-fine-coating-roughness",
+              "side": 0
+            }
+          ]
+        },
+        {
+          "path": "Shahed136/ring[-1][13]",
+          "name": "ring[-1]",
+          "type": "Mesh",
+          "instanced": false,
+          "count": 1,
+          "position": [
+            0,
+            0,
+            -0.9
+          ],
+          "rotation": [
+            0,
+            0,
+            0
+          ],
+          "scale": [
+            1,
+            1,
+            1
+          ],
+          "visible": true,
+          "castShadow": true,
+          "receiveShadow": true,
+          "geometry": {
+            "id": "geometry-9",
+            "type": "TorusGeometry",
+            "parameters": {
+              "radius": 0.412,
+              "tube": 0.0035,
+              "radialSegments": 4,
+              "tubularSegments": 32,
+              "arc": 6.283185307179586
+            },
+            "vertices": 165,
+            "triangles": 256,
+            "hasNormals": true,
+            "hasUV": true
+          },
+          "materials": [
+            {
+              "id": "material-5",
+              "name": "dark-composite-trim",
+              "type": "MeshStandardMaterial",
+              "color": "343b37",
+              "roughness": 0.67,
+              "metalness": 0.16,
+              "opacity": 1,
+              "transparent": false,
+              "emissive": "000000",
+              "emissiveIntensity": 1,
+              "map": null,
+              "normalMap": null,
+              "roughnessMap": "original-fine-coating-roughness",
+              "side": 0
+            }
+          ]
+        },
+        {
+          "path": "Shahed136/ring[0][14]",
+          "name": "ring[0]",
+          "type": "Mesh",
+          "instanced": false,
+          "count": 1,
+          "position": [
+            0,
+            0,
+            0
+          ],
+          "rotation": [
+            0,
+            0,
+            0
+          ],
+          "scale": [
+            1,
+            1,
+            1
+          ],
+          "visible": true,
+          "castShadow": true,
+          "receiveShadow": true,
+          "geometry": {
+            "id": "geometry-9",
+            "type": "TorusGeometry",
+            "parameters": {
+              "radius": 0.412,
+              "tube": 0.0035,
+              "radialSegments": 4,
+              "tubularSegments": 32,
+              "arc": 6.283185307179586
+            },
+            "vertices": 165,
+            "triangles": 256,
+            "hasNormals": true,
+            "hasUV": true
+          },
+          "materials": [
+            {
+              "id": "material-5",
+              "name": "dark-composite-trim",
+              "type": "MeshStandardMaterial",
+              "color": "343b37",
+              "roughness": 0.67,
+              "metalness": 0.16,
+              "opacity": 1,
+              "transparent": false,
+              "emissive": "000000",
+              "emissiveIntensity": 1,
+              "map": null,
+              "normalMap": null,
+              "roughnessMap": "original-fine-coating-roughness",
+              "side": 0
+            }
+          ]
+        },
+        {
+          "path": "Shahed136/ring[1][15]",
+          "name": "ring[1]",
+          "type": "Mesh",
+          "instanced": false,
+          "count": 1,
+          "position": [
+            0,
+            0,
+            0.9
+          ],
+          "rotation": [
+            0,
+            0,
+            0
+          ],
+          "scale": [
+            1,
+            1,
+            1
+          ],
+          "visible": true,
+          "castShadow": true,
+          "receiveShadow": true,
+          "geometry": {
+            "id": "geometry-9",
+            "type": "TorusGeometry",
+            "parameters": {
+              "radius": 0.412,
+              "tube": 0.0035,
+              "radialSegments": 4,
+              "tubularSegments": 32,
+              "arc": 6.283185307179586
+            },
+            "vertices": 165,
+            "triangles": 256,
+            "hasNormals": true,
+            "hasUV": true
+          },
+          "materials": [
+            {
+              "id": "material-5",
+              "name": "dark-composite-trim",
+              "type": "MeshStandardMaterial",
+              "color": "343b37",
+              "roughness": 0.67,
+              "metalness": 0.16,
+              "opacity": 1,
+              "transparent": false,
+              "emissive": "000000",
+              "emissiveIntensity": 1,
+              "map": null,
+              "normalMap": null,
+              "roughnessMap": "original-fine-coating-roughness",
+              "side": 0
+            }
+          ]
+        },
+        {
+          "path": "Shahed136/ring[2][16]",
+          "name": "ring[2]",
+          "type": "Mesh",
+          "instanced": false,
+          "count": 1,
+          "position": [
+            0,
+            0,
+            1.8
+          ],
+          "rotation": [
+            0,
+            0,
+            0
+          ],
+          "scale": [
+            1,
+            1,
+            1
+          ],
+          "visible": true,
+          "castShadow": true,
+          "receiveShadow": true,
+          "geometry": {
+            "id": "geometry-9",
+            "type": "TorusGeometry",
+            "parameters": {
+              "radius": 0.412,
+              "tube": 0.0035,
+              "radialSegments": 4,
+              "tubularSegments": 32,
+              "arc": 6.283185307179586
+            },
+            "vertices": 165,
+            "triangles": 256,
+            "hasNormals": true,
+            "hasUV": true
+          },
+          "materials": [
+            {
+              "id": "material-5",
+              "name": "dark-composite-trim",
+              "type": "MeshStandardMaterial",
+              "color": "343b37",
+              "roughness": 0.67,
+              "metalness": 0.16,
+              "opacity": 1,
+              "transparent": false,
+              "emissive": "000000",
+              "emissiveIntensity": 1,
+              "map": null,
+              "normalMap": null,
+              "roughnessMap": "original-fine-coating-roughness",
+              "side": 0
+            }
+          ]
+        },
+        {
+          "path": "Shahed136/recognition-detail-lod[17]",
+          "name": "recognition-detail-lod",
+          "type": "LOD",
+          "instanced": false,
+          "count": 1,
+          "position": [
+            0,
+            0,
+            0
+          ],
+          "rotation": [
+            0,
+            0,
+            0
+          ],
+          "scale": [
+            1,
+            1,
+            1
+          ],
+          "visible": true,
+          "castShadow": false,
+          "receiveShadow": false,
+          "geometry": null,
+          "materials": []
+        },
+        {
+          "path": "Shahed136/recognition-detail-lod[17]/panel-fasteners[0]",
+          "name": "panel-fasteners",
+          "type": "Mesh",
+          "instanced": true,
+          "count": 20,
+          "position": [
+            0,
+            0,
+            0
+          ],
+          "rotation": [
+            0,
+            0,
+            0
+          ],
+          "scale": [
+            1,
+            1,
+            1
+          ],
+          "visible": true,
+          "castShadow": false,
+          "receiveShadow": false,
+          "geometry": {
+            "id": "geometry-10",
+            "type": "SphereGeometry",
+            "parameters": {
+              "radius": 0.012,
+              "widthSegments": 6,
+              "heightSegments": 4,
+              "phiStart": 0,
+              "phiLength": 6.283185307179586,
+              "thetaStart": 0,
+              "thetaLength": 3.141592653589793
+            },
+            "vertices": 35,
+            "triangles": 36,
+            "hasNormals": true,
+            "hasUV": true
+          },
+          "materials": [
+            {
+              "id": "material-3",
+              "name": "satin-metal-fittings",
+              "type": "MeshStandardMaterial",
+              "color": "737b7e",
+              "roughness": 0.43,
+              "metalness": 0.82,
+              "opacity": 1,
+              "transparent": false,
+              "emissive": "000000",
+              "emissiveIntensity": 1,
+              "map": null,
+              "normalMap": null,
+              "roughnessMap": "original-fine-coating-roughness",
+              "side": 0
+            }
+          ]
+        },
+        {
+          "path": "Shahed136/recognition-detail-lod[17]/distant-detail-omitted[1]",
+          "name": "distant-detail-omitted",
+          "type": "Group",
+          "instanced": false,
+          "count": 1,
+          "position": [
+            0,
+            0,
+            0
+          ],
+          "rotation": [
+            0,
+            0,
+            0
+          ],
+          "scale": [
+            1,
+            1,
+            1
+          ],
+          "visible": true,
+          "castShadow": false,
+          "receiveShadow": false,
+          "geometry": null,
+          "materials": []
+        }
+      ],
+      "uniqueGeometries": 11,
+      "materials": 6
+    },
+    "mobileAirframe": {
+      "objects": [
+        {
+          "path": "Shahed136",
+          "name": "Shahed136",
+          "type": "Group",
+          "instanced": false,
+          "count": 1,
+          "position": [
+            0,
+            0,
+            0
+          ],
+          "rotation": [
+            0,
+            0,
+            0
+          ],
+          "scale": [
+            0.5,
+            0.5,
+            0.5
+          ],
+          "visible": true,
+          "castShadow": false,
+          "receiveShadow": false,
+          "geometry": null,
+          "materials": []
+        },
+        {
+          "path": "Shahed136/fuse[0]",
+          "name": "fuse",
+          "type": "Mesh",
+          "instanced": false,
+          "count": 1,
+          "position": [
+            0,
+            0,
+            0
+          ],
+          "rotation": [
+            1.5707963267948966,
+            0,
+            0
+          ],
+          "scale": [
+            1,
+            1,
+            1
+          ],
+          "visible": true,
+          "castShadow": true,
+          "receiveShadow": true,
+          "geometry": {
+            "id": "geometry-0",
+            "type": "LatheGeometry",
+            "parameters": {
+              "points": [
+                {
+                  "x": 0.3,
+                  "y": -2.75
+                },
+                {
+                  "x": 0.36,
+                  "y": -2.6
+                },
+                {
+                  "x": 0.39,
+                  "y": -2.1
+                },
+                {
+                  "x": 0.41,
+                  "y": -0.8
+                },
+                {
+                  "x": 0.43,
+                  "y": 1.5
+                },
+                {
+                  "x": 0.4,
+                  "y": 2.65
+                },
+                {
+                  "x": 0.34,
+                  "y": 2.8
+                }
+              ],
+              "segments": 24,
+              "phiStart": 0,
+              "phiLength": 6.283185307179586
+            },
+            "vertices": 175,
+            "triangles": 288,
+            "hasNormals": true,
+            "hasUV": true
+          },
+          "materials": [
+            {
+              "id": "material-0",
+              "name": "matte-painted-composite",
+              "type": "MeshStandardMaterial",
+              "color": "b6b8a5",
+              "roughness": 0.64,
+              "metalness": 0.02,
+              "opacity": 1,
+              "transparent": false,
+              "emissive": "000000",
+              "emissiveIntensity": 1,
+              "map": null,
+              "normalMap": "original-fine-coating-normal",
+              "roughnessMap": "original-fine-coating-roughness",
+              "side": 0
+            }
+          ]
+        },
+        {
+          "path": "Shahed136/nose[1]",
+          "name": "nose",
+          "type": "Mesh",
+          "instanced": false,
+          "count": 1,
+          "position": [
+            0,
+            0,
+            -2.75
+          ],
+          "rotation": [
+            1.5707963267948966,
+            0,
+            0
+          ],
+          "scale": [
+            1,
+            1,
+            1
+          ],
+          "visible": true,
+          "castShadow": true,
+          "receiveShadow": true,
+          "geometry": {
+            "id": "geometry-1",
+            "type": "LatheGeometry",
+            "parameters": {
+              "points": [
+                {
+                  "x": 0,
+                  "y": -1.35
+                },
+                {
+                  "x": 0.08,
+                  "y": -1.18
+                },
+                {
+                  "x": 0.2,
+                  "y": -0.7
+                },
+                {
+                  "x": 0.3,
+                  "y": -0.18
+                },
+                {
+                  "x": 0.3,
+                  "y": 0
+                }
+              ],
+              "segments": 24,
+              "phiStart": 0,
+              "phiLength": 6.283185307179586
+            },
+            "vertices": 125,
+            "triangles": 192,
+            "hasNormals": true,
+            "hasUV": true
+          },
+          "materials": [
+            {
+              "id": "material-1",
+              "name": "painted-nose-cover",
+              "type": "MeshStandardMaterial",
+              "color": "838779",
+              "roughness": 0.57,
+              "metalness": 0.01,
+              "opacity": 1,
+              "transparent": false,
+              "emissive": "000000",
+              "emissiveIntensity": 1,
+              "map": null,
+              "normalMap": "original-fine-coating-normal",
+              "roughnessMap": "original-fine-coating-roughness",
+              "side": 0
+            }
+          ]
+        },
+        {
+          "path": "Shahed136/eo[2]",
+          "name": "eo",
+          "type": "Mesh",
+          "instanced": false,
+          "count": 1,
+          "position": [
+            0,
+            -0.33,
+            -2.38
+          ],
+          "rotation": [
+            0,
+            0,
+            0
+          ],
+          "scale": [
+            1,
+            1,
+            1
+          ],
+          "visible": true,
+          "castShadow": true,
+          "receiveShadow": true,
+          "geometry": {
+            "id": "geometry-2",
+            "type": "SphereGeometry",
+            "parameters": {
+              "radius": 0.23,
+              "widthSegments": 16,
+              "heightSegments": 12,
+              "phiStart": 0,
+              "phiLength": 6.283185307179586,
+              "thetaStart": 0,
+              "thetaLength": 3.141592653589793
+            },
+            "vertices": 221,
+            "triangles": 352,
+            "hasNormals": true,
+            "hasUV": true
+          },
+          "materials": [
+            {
+              "id": "material-2",
+              "name": "dark-optical-cover",
+              "type": "MeshPhysicalMaterial",
+              "color": "101e22",
+              "roughness": 0.09,
+              "metalness": 0,
+              "opacity": 1,
+              "transparent": false,
+              "emissive": "000000",
+              "emissiveIntensity": 1,
+              "clearcoat": 1,
+              "map": null,
+              "normalMap": null,
+              "roughnessMap": null,
+              "side": 0
+            }
+          ]
+        },
+        {
+          "path": "Shahed136/tailCap[3]",
+          "name": "tailCap",
+          "type": "Mesh",
+          "instanced": false,
+          "count": 1,
+          "position": [
+            0,
+            0,
+            2.95
+          ],
+          "rotation": [
+            1.5707963267948966,
+            0,
+            0
+          ],
+          "scale": [
+            1,
+            1,
+            1
+          ],
+          "visible": true,
+          "castShadow": true,
+          "receiveShadow": true,
+          "geometry": {
+            "id": "geometry-3",
+            "type": "CylinderGeometry",
+            "parameters": {
+              "radiusTop": 0.34,
+              "radiusBottom": 0.28,
+              "height": 0.44,
+              "radialSegments": 24,
+              "heightSegments": 1,
+              "openEnded": false,
+              "thetaStart": 0,
+              "thetaLength": 6.283185307179586
+            },
+            "vertices": 148,
+            "triangles": 96,
+            "hasNormals": true,
+            "hasUV": true
+          },
+          "materials": [
+            {
+              "id": "material-3",
+              "name": "satin-metal-fittings",
+              "type": "MeshStandardMaterial",
+              "color": "737b7e",
+              "roughness": 0.43,
+              "metalness": 0.82,
+              "opacity": 1,
+              "transparent": false,
+              "emissive": "000000",
+              "emissiveIntensity": 1,
+              "map": null,
+              "normalMap": null,
+              "roughnessMap": "original-fine-coating-roughness",
+              "side": 0
+            }
+          ]
+        },
+        {
+          "path": "Shahed136/wingR[4]",
+          "name": "wingR",
+          "type": "Mesh",
+          "instanced": false,
+          "count": 1,
+          "position": [
+            0,
+            0.02,
+            0.3
+          ],
+          "rotation": [
+            -1.5707963267948966,
+            0,
+            0
+          ],
+          "scale": [
+            1,
+            1,
+            1
+          ],
+          "visible": true,
+          "castShadow": true,
+          "receiveShadow": true,
+          "geometry": {
+            "id": "geometry-4",
+            "type": "ExtrudeGeometry",
+            "parameters": {
+              "options": {
+                "steps": 1,
+                "depth": 0.065,
+                "bevelEnabled": true,
+                "bevelThickness": 0.015,
+                "bevelSize": 0.025,
+                "bevelSegments": 1,
+                "curveSegments": 1
+              }
+            },
+            "vertices": 60,
+            "triangles": 20,
+            "hasNormals": true,
+            "hasUV": true
+          },
+          "materials": [
+            {
+              "id": "material-0",
+              "name": "matte-painted-composite",
+              "type": "MeshStandardMaterial",
+              "color": "b6b8a5",
+              "roughness": 0.64,
+              "metalness": 0.02,
+              "opacity": 1,
+              "transparent": false,
+              "emissive": "000000",
+              "emissiveIntensity": 1,
+              "map": null,
+              "normalMap": "original-fine-coating-normal",
+              "roughnessMap": "original-fine-coating-roughness",
+              "side": 0
+            }
+          ]
+        },
+        {
+          "path": "Shahed136/wingL[5]",
+          "name": "wingL",
+          "type": "Mesh",
+          "instanced": false,
+          "count": 1,
+          "position": [
+            0,
+            0.02,
+            0.3
+          ],
+          "rotation": [
+            -1.5707963267948963,
+            0,
+            0
+          ],
+          "scale": [
+            -1,
+            1,
+            1
+          ],
+          "visible": true,
+          "castShadow": true,
+          "receiveShadow": true,
+          "geometry": {
+            "id": "geometry-4",
+            "type": "ExtrudeGeometry",
+            "parameters": {
+              "options": {
+                "steps": 1,
+                "depth": 0.065,
+                "bevelEnabled": true,
+                "bevelThickness": 0.015,
+                "bevelSize": 0.025,
+                "bevelSegments": 1,
+                "curveSegments": 1
+              }
+            },
+            "vertices": 60,
+            "triangles": 20,
+            "hasNormals": true,
+            "hasUV": true
+          },
+          "materials": [
+            {
+              "id": "material-0",
+              "name": "matte-painted-composite",
+              "type": "MeshStandardMaterial",
+              "color": "b6b8a5",
+              "roughness": 0.64,
+              "metalness": 0.02,
+              "opacity": 1,
+              "transparent": false,
+              "emissive": "000000",
+              "emissiveIntensity": 1,
+              "map": null,
+              "normalMap": "original-fine-coating-normal",
+              "roughnessMap": "original-fine-coating-roughness",
+              "side": 0
+            }
+          ]
+        },
+        {
+          "path": "Shahed136/tip[-1][6]",
+          "name": "tip[-1]",
+          "type": "Mesh",
+          "instanced": false,
+          "count": 1,
+          "position": [
+            -2.54,
+            0.03,
+            1.6
+          ],
+          "rotation": [
+            0,
+            -0.12,
+            0
+          ],
+          "scale": [
+            1,
+            1,
+            1
+          ],
+          "visible": true,
+          "castShadow": true,
+          "receiveShadow": true,
+          "geometry": {
+            "id": "geometry-5",
+            "type": "BoxGeometry",
+            "parameters": {
+              "width": 1,
+              "height": 1,
+              "depth": 1,
+              "widthSegments": 3,
+              "heightSegments": 3,
+              "depthSegments": 3
+            },
+            "vertices": 324,
+            "triangles": 108,
+            "hasNormals": true,
+            "hasUV": true
+          },
+          "materials": [
+            {
+              "id": "material-4",
+              "name": "non-emissive-identification-paint",
+              "type": "MeshStandardMaterial",
+              "color": "c1b784",
+              "roughness": 0.55,
+              "metalness": 0.03,
+              "opacity": 1,
+              "transparent": false,
+              "emissive": "000000",
+              "emissiveIntensity": 1,
+              "map": null,
+              "normalMap": null,
+              "roughnessMap": "original-fine-coating-roughness",
+              "side": 0
+            }
+          ]
+        },
+        {
+          "path": "Shahed136/fin[-1][7]",
+          "name": "fin[-1]",
+          "type": "Mesh",
+          "instanced": false,
+          "count": 1,
+          "position": [
+            -0.34,
+            0.29,
+            2.57
+          ],
+          "rotation": [
+            0,
+            0,
+            -0.55
+          ],
+          "scale": [
+            1,
+            1,
+            1
+          ],
+          "visible": true,
+          "castShadow": true,
+          "receiveShadow": true,
+          "geometry": {
+            "id": "geometry-6",
+            "type": "BoxGeometry",
+            "parameters": {
+              "width": 1,
+              "height": 1,
+              "depth": 1,
+              "widthSegments": 3,
+              "heightSegments": 3,
+              "depthSegments": 3
+            },
+            "vertices": 324,
+            "triangles": 108,
+            "hasNormals": true,
+            "hasUV": true
+          },
+          "materials": [
+            {
+              "id": "material-5",
+              "name": "dark-composite-trim",
+              "type": "MeshStandardMaterial",
+              "color": "343b37",
+              "roughness": 0.67,
+              "metalness": 0.16,
+              "opacity": 1,
+              "transparent": false,
+              "emissive": "000000",
+              "emissiveIntensity": 1,
+              "map": null,
+              "normalMap": null,
+              "roughnessMap": "original-fine-coating-roughness",
+              "side": 0
+            }
+          ]
+        },
+        {
+          "path": "Shahed136/tip[1][8]",
+          "name": "tip[1]",
+          "type": "Mesh",
+          "instanced": false,
+          "count": 1,
+          "position": [
+            2.54,
+            0.03,
+            1.6
+          ],
+          "rotation": [
+            0,
+            0.12,
+            0
+          ],
+          "scale": [
+            1,
+            1,
+            1
+          ],
+          "visible": true,
+          "castShadow": true,
+          "receiveShadow": true,
+          "geometry": {
+            "id": "geometry-5",
+            "type": "BoxGeometry",
+            "parameters": {
+              "width": 1,
+              "height": 1,
+              "depth": 1,
+              "widthSegments": 3,
+              "heightSegments": 3,
+              "depthSegments": 3
+            },
+            "vertices": 324,
+            "triangles": 108,
+            "hasNormals": true,
+            "hasUV": true
+          },
+          "materials": [
+            {
+              "id": "material-4",
+              "name": "non-emissive-identification-paint",
+              "type": "MeshStandardMaterial",
+              "color": "c1b784",
+              "roughness": 0.55,
+              "metalness": 0.03,
+              "opacity": 1,
+              "transparent": false,
+              "emissive": "000000",
+              "emissiveIntensity": 1,
+              "map": null,
+              "normalMap": null,
+              "roughnessMap": "original-fine-coating-roughness",
+              "side": 0
+            }
+          ]
+        },
+        {
+          "path": "Shahed136/fin[1][9]",
+          "name": "fin[1]",
+          "type": "Mesh",
+          "instanced": false,
+          "count": 1,
+          "position": [
+            0.34,
+            0.29,
+            2.57
+          ],
+          "rotation": [
+            0,
+            0,
+            0.55
+          ],
+          "scale": [
+            1,
+            1,
+            1
+          ],
+          "visible": true,
+          "castShadow": true,
+          "receiveShadow": true,
+          "geometry": {
+            "id": "geometry-6",
+            "type": "BoxGeometry",
+            "parameters": {
+              "width": 1,
+              "height": 1,
+              "depth": 1,
+              "widthSegments": 3,
+              "heightSegments": 3,
+              "depthSegments": 3
+            },
+            "vertices": 324,
+            "triangles": 108,
+            "hasNormals": true,
+            "hasUV": true
+          },
+          "materials": [
+            {
+              "id": "material-5",
+              "name": "dark-composite-trim",
+              "type": "MeshStandardMaterial",
+              "color": "343b37",
+              "roughness": 0.67,
+              "metalness": 0.16,
+              "opacity": 1,
+              "transparent": false,
+              "emissive": "000000",
+              "emissiveIntensity": 1,
+              "map": null,
+              "normalMap": null,
+              "roughnessMap": "original-fine-coating-roughness",
+              "side": 0
+            }
+          ]
+        },
+        {
+          "path": "Shahed136/hub[10]",
+          "name": "hub",
+          "type": "Mesh",
+          "instanced": false,
+          "count": 1,
+          "position": [
+            0,
+            0,
+            3.25
+          ],
+          "rotation": [
+            1.5707963267948966,
+            0,
+            0
+          ],
+          "scale": [
+            1,
+            1,
+            1
+          ],
+          "visible": true,
+          "castShadow": true,
+          "receiveShadow": true,
+          "geometry": {
+            "id": "geometry-7",
+            "type": "CylinderGeometry",
+            "parameters": {
+              "radiusTop": 0.1,
+              "radiusBottom": 0.1,
+              "height": 0.25,
+              "radialSegments": 16,
+              "heightSegments": 1,
+              "openEnded": false,
+              "thetaStart": 0,
+              "thetaLength": 6.283185307179586
+            },
+            "vertices": 100,
+            "triangles": 64,
+            "hasNormals": true,
+            "hasUV": true
+          },
+          "materials": [
+            {
+              "id": "material-3",
+              "name": "satin-metal-fittings",
+              "type": "MeshStandardMaterial",
+              "color": "737b7e",
+              "roughness": 0.43,
+              "metalness": 0.82,
+              "opacity": 1,
+              "transparent": false,
+              "emissive": "000000",
+              "emissiveIntensity": 1,
+              "map": null,
+              "normalMap": null,
+              "roughnessMap": "original-fine-coating-roughness",
+              "side": 0
+            }
+          ]
+        },
+        {
+          "path": "Shahed136/prop[11]",
+          "name": "prop",
+          "type": "Group",
+          "instanced": false,
+          "count": 1,
+          "position": [
+            0,
+            0,
+            3.4
+          ],
+          "rotation": [
+            0,
+            0,
+            0
+          ],
+          "scale": [
+            1,
+            1,
+            1
+          ],
+          "visible": true,
+          "castShadow": false,
+          "receiveShadow": false,
+          "geometry": null,
+          "materials": []
+        },
+        {
+          "path": "Shahed136/prop[11]/blade[0][0]",
+          "name": "blade[0]",
+          "type": "Mesh",
+          "instanced": false,
+          "count": 1,
+          "position": [
+            0,
+            0,
+            0
+          ],
+          "rotation": [
+            0,
+            0,
+            0
+          ],
+          "scale": [
+            1,
+            1,
+            1
+          ],
+          "visible": true,
+          "castShadow": true,
+          "receiveShadow": true,
+          "geometry": {
+            "id": "geometry-8",
+            "type": "BoxGeometry",
+            "parameters": {
+              "width": 1,
+              "height": 1,
+              "depth": 1,
+              "widthSegments": 3,
+              "heightSegments": 3,
+              "depthSegments": 3
+            },
+            "vertices": 324,
+            "triangles": 108,
+            "hasNormals": true,
+            "hasUV": true
+          },
+          "materials": [
+            {
+              "id": "material-5",
+              "name": "dark-composite-trim",
+              "type": "MeshStandardMaterial",
+              "color": "343b37",
+              "roughness": 0.67,
+              "metalness": 0.16,
+              "opacity": 1,
+              "transparent": false,
+              "emissive": "000000",
+              "emissiveIntensity": 1,
+              "map": null,
+              "normalMap": null,
+              "roughnessMap": "original-fine-coating-roughness",
+              "side": 0
+            }
+          ]
+        },
+        {
+          "path": "Shahed136/prop[11]/blade[1][1]",
+          "name": "blade[1]",
+          "type": "Mesh",
+          "instanced": false,
+          "count": 1,
+          "position": [
+            0,
+            0,
+            0
+          ],
+          "rotation": [
+            0,
+            0,
+            1.5707963267948966
+          ],
+          "scale": [
+            1,
+            1,
+            1
+          ],
+          "visible": true,
+          "castShadow": true,
+          "receiveShadow": true,
+          "geometry": {
+            "id": "geometry-8",
+            "type": "BoxGeometry",
+            "parameters": {
+              "width": 1,
+              "height": 1,
+              "depth": 1,
+              "widthSegments": 3,
+              "heightSegments": 3,
+              "depthSegments": 3
+            },
+            "vertices": 324,
+            "triangles": 108,
+            "hasNormals": true,
+            "hasUV": true
+          },
+          "materials": [
+            {
+              "id": "material-5",
+              "name": "dark-composite-trim",
+              "type": "MeshStandardMaterial",
+              "color": "343b37",
+              "roughness": 0.67,
+              "metalness": 0.16,
+              "opacity": 1,
+              "transparent": false,
+              "emissive": "000000",
+              "emissiveIntensity": 1,
+              "map": null,
+              "normalMap": null,
+              "roughnessMap": "original-fine-coating-roughness",
+              "side": 0
+            }
+          ]
+        },
+        {
+          "path": "Shahed136/ring[-2][12]",
+          "name": "ring[-2]",
+          "type": "Mesh",
+          "instanced": false,
+          "count": 1,
+          "position": [
+            0,
+            0,
+            -1.8
+          ],
+          "rotation": [
+            0,
+            0,
+            0
+          ],
+          "scale": [
+            1,
+            1,
+            1
+          ],
+          "visible": true,
+          "castShadow": true,
+          "receiveShadow": true,
+          "geometry": {
+            "id": "geometry-9",
+            "type": "TorusGeometry",
+            "parameters": {
+              "radius": 0.412,
+              "tube": 0.0035,
+              "radialSegments": 4,
+              "tubularSegments": 20,
+              "arc": 6.283185307179586
+            },
+            "vertices": 105,
+            "triangles": 160,
+            "hasNormals": true,
+            "hasUV": true
+          },
+          "materials": [
+            {
+              "id": "material-5",
+              "name": "dark-composite-trim",
+              "type": "MeshStandardMaterial",
+              "color": "343b37",
+              "roughness": 0.67,
+              "metalness": 0.16,
+              "opacity": 1,
+              "transparent": false,
+              "emissive": "000000",
+              "emissiveIntensity": 1,
+              "map": null,
+              "normalMap": null,
+              "roughnessMap": "original-fine-coating-roughness",
+              "side": 0
+            }
+          ]
+        },
+        {
+          "path": "Shahed136/ring[-1][13]",
+          "name": "ring[-1]",
+          "type": "Mesh",
+          "instanced": false,
+          "count": 1,
+          "position": [
+            0,
+            0,
+            -0.9
+          ],
+          "rotation": [
+            0,
+            0,
+            0
+          ],
+          "scale": [
+            1,
+            1,
+            1
+          ],
+          "visible": true,
+          "castShadow": true,
+          "receiveShadow": true,
+          "geometry": {
+            "id": "geometry-9",
+            "type": "TorusGeometry",
+            "parameters": {
+              "radius": 0.412,
+              "tube": 0.0035,
+              "radialSegments": 4,
+              "tubularSegments": 20,
+              "arc": 6.283185307179586
+            },
+            "vertices": 105,
+            "triangles": 160,
+            "hasNormals": true,
+            "hasUV": true
+          },
+          "materials": [
+            {
+              "id": "material-5",
+              "name": "dark-composite-trim",
+              "type": "MeshStandardMaterial",
+              "color": "343b37",
+              "roughness": 0.67,
+              "metalness": 0.16,
+              "opacity": 1,
+              "transparent": false,
+              "emissive": "000000",
+              "emissiveIntensity": 1,
+              "map": null,
+              "normalMap": null,
+              "roughnessMap": "original-fine-coating-roughness",
+              "side": 0
+            }
+          ]
+        },
+        {
+          "path": "Shahed136/ring[0][14]",
+          "name": "ring[0]",
+          "type": "Mesh",
+          "instanced": false,
+          "count": 1,
+          "position": [
+            0,
+            0,
+            0
+          ],
+          "rotation": [
+            0,
+            0,
+            0
+          ],
+          "scale": [
+            1,
+            1,
+            1
+          ],
+          "visible": true,
+          "castShadow": true,
+          "receiveShadow": true,
+          "geometry": {
+            "id": "geometry-9",
+            "type": "TorusGeometry",
+            "parameters": {
+              "radius": 0.412,
+              "tube": 0.0035,
+              "radialSegments": 4,
+              "tubularSegments": 20,
+              "arc": 6.283185307179586
+            },
+            "vertices": 105,
+            "triangles": 160,
+            "hasNormals": true,
+            "hasUV": true
+          },
+          "materials": [
+            {
+              "id": "material-5",
+              "name": "dark-composite-trim",
+              "type": "MeshStandardMaterial",
+              "color": "343b37",
+              "roughness": 0.67,
+              "metalness": 0.16,
+              "opacity": 1,
+              "transparent": false,
+              "emissive": "000000",
+              "emissiveIntensity": 1,
+              "map": null,
+              "normalMap": null,
+              "roughnessMap": "original-fine-coating-roughness",
+              "side": 0
+            }
+          ]
+        },
+        {
+          "path": "Shahed136/ring[1][15]",
+          "name": "ring[1]",
+          "type": "Mesh",
+          "instanced": false,
+          "count": 1,
+          "position": [
+            0,
+            0,
+            0.9
+          ],
+          "rotation": [
+            0,
+            0,
+            0
+          ],
+          "scale": [
+            1,
+            1,
+            1
+          ],
+          "visible": true,
+          "castShadow": true,
+          "receiveShadow": true,
+          "geometry": {
+            "id": "geometry-9",
+            "type": "TorusGeometry",
+            "parameters": {
+              "radius": 0.412,
+              "tube": 0.0035,
+              "radialSegments": 4,
+              "tubularSegments": 20,
+              "arc": 6.283185307179586
+            },
+            "vertices": 105,
+            "triangles": 160,
+            "hasNormals": true,
+            "hasUV": true
+          },
+          "materials": [
+            {
+              "id": "material-5",
+              "name": "dark-composite-trim",
+              "type": "MeshStandardMaterial",
+              "color": "343b37",
+              "roughness": 0.67,
+              "metalness": 0.16,
+              "opacity": 1,
+              "transparent": false,
+              "emissive": "000000",
+              "emissiveIntensity": 1,
+              "map": null,
+              "normalMap": null,
+              "roughnessMap": "original-fine-coating-roughness",
+              "side": 0
+            }
+          ]
+        },
+        {
+          "path": "Shahed136/ring[2][16]",
+          "name": "ring[2]",
+          "type": "Mesh",
+          "instanced": false,
+          "count": 1,
+          "position": [
+            0,
+            0,
+            1.8
+          ],
+          "rotation": [
+            0,
+            0,
+            0
+          ],
+          "scale": [
+            1,
+            1,
+            1
+          ],
+          "visible": true,
+          "castShadow": true,
+          "receiveShadow": true,
+          "geometry": {
+            "id": "geometry-9",
+            "type": "TorusGeometry",
+            "parameters": {
+              "radius": 0.412,
+              "tube": 0.0035,
+              "radialSegments": 4,
+              "tubularSegments": 20,
+              "arc": 6.283185307179586
+            },
+            "vertices": 105,
+            "triangles": 160,
+            "hasNormals": true,
+            "hasUV": true
+          },
+          "materials": [
+            {
+              "id": "material-5",
+              "name": "dark-composite-trim",
+              "type": "MeshStandardMaterial",
+              "color": "343b37",
+              "roughness": 0.67,
+              "metalness": 0.16,
+              "opacity": 1,
+              "transparent": false,
+              "emissive": "000000",
+              "emissiveIntensity": 1,
+              "map": null,
+              "normalMap": null,
+              "roughnessMap": "original-fine-coating-roughness",
+              "side": 0
+            }
+          ]
+        },
+        {
+          "path": "Shahed136/recognition-detail-lod[17]",
+          "name": "recognition-detail-lod",
+          "type": "LOD",
+          "instanced": false,
+          "count": 1,
+          "position": [
+            0,
+            0,
+            0
+          ],
+          "rotation": [
+            0,
+            0,
+            0
+          ],
+          "scale": [
+            1,
+            1,
+            1
+          ],
+          "visible": true,
+          "castShadow": false,
+          "receiveShadow": false,
+          "geometry": null,
+          "materials": []
+        },
+        {
+          "path": "Shahed136/recognition-detail-lod[17]/panel-fasteners[0]",
+          "name": "panel-fasteners",
+          "type": "Mesh",
+          "instanced": true,
+          "count": 20,
+          "position": [
+            0,
+            0,
+            0
+          ],
+          "rotation": [
+            0,
+            0,
+            0
+          ],
+          "scale": [
+            1,
+            1,
+            1
+          ],
+          "visible": true,
+          "castShadow": false,
+          "receiveShadow": false,
+          "geometry": {
+            "id": "geometry-10",
+            "type": "SphereGeometry",
+            "parameters": {
+              "radius": 0.012,
+              "widthSegments": 6,
+              "heightSegments": 4,
+              "phiStart": 0,
+              "phiLength": 6.283185307179586,
+              "thetaStart": 0,
+              "thetaLength": 3.141592653589793
+            },
+            "vertices": 35,
+            "triangles": 36,
+            "hasNormals": true,
+            "hasUV": true
+          },
+          "materials": [
+            {
+              "id": "material-3",
+              "name": "satin-metal-fittings",
+              "type": "MeshStandardMaterial",
+              "color": "737b7e",
+              "roughness": 0.43,
+              "metalness": 0.82,
+              "opacity": 1,
+              "transparent": false,
+              "emissive": "000000",
+              "emissiveIntensity": 1,
+              "map": null,
+              "normalMap": null,
+              "roughnessMap": "original-fine-coating-roughness",
+              "side": 0
+            }
+          ]
+        },
+        {
+          "path": "Shahed136/recognition-detail-lod[17]/distant-detail-omitted[1]",
+          "name": "distant-detail-omitted",
+          "type": "Group",
+          "instanced": false,
+          "count": 1,
+          "position": [
+            0,
+            0,
+            0
+          ],
+          "rotation": [
+            0,
+            0,
+            0
+          ],
+          "scale": [
+            1,
+            1,
+            1
+          ],
+          "visible": true,
+          "castShadow": false,
+          "receiveShadow": false,
+          "geometry": null,
+          "materials": []
+        }
+      ],
+      "uniqueGeometries": 11,
+      "materials": 6
+    },
+    "roomEnvironment": {
+      "objects": [
+        {
+          "path": "Scene",
+          "name": "",
+          "type": "Scene",
+          "instanced": false,
+          "count": 1,
+          "position": [
+            0,
+            0,
+            0
+          ],
+          "rotation": [
+            0,
+            0,
+            0
+          ],
+          "scale": [
+            1,
+            1,
+            1
+          ],
+          "visible": true,
+          "castShadow": false,
+          "receiveShadow": false,
+          "geometry": null,
+          "materials": []
+        },
+        {
+          "path": "Scene/PointLight[0]",
+          "name": "",
+          "type": "PointLight",
+          "instanced": false,
+          "count": 1,
+          "position": [
+            0.418,
+            16.199,
+            0.3
+          ],
+          "rotation": [
+            0,
+            0,
+            0
+          ],
+          "scale": [
+            1,
+            1,
+            1
+          ],
+          "visible": true,
+          "castShadow": false,
+          "receiveShadow": false,
+          "geometry": null,
+          "materials": []
+        },
+        {
+          "path": "Scene/Mesh[1]",
+          "name": "",
+          "type": "Mesh",
+          "instanced": false,
+          "count": 1,
+          "position": [
+            -0.757,
+            13.219,
+            0.717
+          ],
+          "rotation": [
+            0,
+            0,
+            0
+          ],
+          "scale": [
+            31.713,
+            28.305,
+            28.591
+          ],
+          "visible": true,
+          "castShadow": false,
+          "receiveShadow": false,
+          "geometry": {
+            "id": "geometry-0",
+            "type": "BoxGeometry",
+            "parameters": {
+              "width": 1,
+              "height": 1,
+              "depth": 1,
+              "widthSegments": 1,
+              "heightSegments": 1,
+              "depthSegments": 1
+            },
+            "vertices": 24,
+            "triangles": 12,
+            "hasNormals": true,
+            "hasUV": false
+          },
+          "materials": [
+            {
+              "id": "material-0",
+              "name": "",
+              "type": "MeshStandardMaterial",
+              "color": "ffffff",
+              "roughness": 1,
+              "metalness": 0,
+              "opacity": 1,
+              "transparent": false,
+              "emissive": "000000",
+              "emissiveIntensity": 1,
+              "map": null,
+              "normalMap": null,
+              "roughnessMap": null,
+              "side": 1
+            }
+          ]
+        },
+        {
+          "path": "Scene/Mesh[2]",
+          "name": "",
+          "type": "Mesh",
+          "instanced": false,
+          "count": 1,
+          "position": [
+            -10.906,
+            2.009,
+            1.846
+          ],
+          "rotation": [
+            0,
+            -0.195,
+            0
+          ],
+          "scale": [
+            2.328,
+            7.905,
+            4.651
+          ],
+          "visible": true,
+          "castShadow": false,
+          "receiveShadow": false,
+          "geometry": {
+            "id": "geometry-0",
+            "type": "BoxGeometry",
+            "parameters": {
+              "width": 1,
+              "height": 1,
+              "depth": 1,
+              "widthSegments": 1,
+              "heightSegments": 1,
+              "depthSegments": 1
+            },
+            "vertices": 24,
+            "triangles": 12,
+            "hasNormals": true,
+            "hasUV": false
+          },
+          "materials": [
+            {
+              "id": "material-1",
+              "name": "",
+              "type": "MeshStandardMaterial",
+              "color": "ffffff",
+              "roughness": 1,
+              "metalness": 0,
+              "opacity": 1,
+              "transparent": false,
+              "emissive": "000000",
+              "emissiveIntensity": 1,
+              "map": null,
+              "normalMap": null,
+              "roughnessMap": null,
+              "side": 0
+            }
+          ]
+        },
+        {
+          "path": "Scene/Mesh[3]",
+          "name": "",
+          "type": "Mesh",
+          "instanced": false,
+          "count": 1,
+          "position": [
+            -5.607,
+            -0.754,
+            -0.758
+          ],
+          "rotation": [
+            0,
+            0.994,
+            0
+          ],
+          "scale": [
+            1.97,
+            1.534,
+            3.955
+          ],
+          "visible": true,
+          "castShadow": false,
+          "receiveShadow": false,
+          "geometry": {
+            "id": "geometry-0",
+            "type": "BoxGeometry",
+            "parameters": {
+              "width": 1,
+              "height": 1,
+              "depth": 1,
+              "widthSegments": 1,
+              "heightSegments": 1,
+              "depthSegments": 1
+            },
+            "vertices": 24,
+            "triangles": 12,
+            "hasNormals": true,
+            "hasUV": false
+          },
+          "materials": [
+            {
+              "id": "material-1",
+              "name": "",
+              "type": "MeshStandardMaterial",
+              "color": "ffffff",
+              "roughness": 1,
+              "metalness": 0,
+              "opacity": 1,
+              "transparent": false,
+              "emissive": "000000",
+              "emissiveIntensity": 1,
+              "map": null,
+              "normalMap": null,
+              "roughnessMap": null,
+              "side": 0
+            }
+          ]
+        },
+        {
+          "path": "Scene/Mesh[4]",
+          "name": "",
+          "type": "Mesh",
+          "instanced": false,
+          "count": 1,
+          "position": [
+            6.167,
+            0.857,
+            7.803
+          ],
+          "rotation": [
+            0,
+            0.561,
+            0
+          ],
+          "scale": [
+            3.927,
+            6.285,
+            3.687
+          ],
+          "visible": true,
+          "castShadow": false,
+          "receiveShadow": false,
+          "geometry": {
+            "id": "geometry-0",
+            "type": "BoxGeometry",
+            "parameters": {
+              "width": 1,
+              "height": 1,
+              "depth": 1,
+              "widthSegments": 1,
+              "heightSegments": 1,
+              "depthSegments": 1
+            },
+            "vertices": 24,
+            "triangles": 12,
+            "hasNormals": true,
+            "hasUV": false
+          },
+          "materials": [
+            {
+              "id": "material-1",
+              "name": "",
+              "type": "MeshStandardMaterial",
+              "color": "ffffff",
+              "roughness": 1,
+              "metalness": 0,
+              "opacity": 1,
+              "transparent": false,
+              "emissive": "000000",
+              "emissiveIntensity": 1,
+              "map": null,
+              "normalMap": null,
+              "roughnessMap": null,
+              "side": 0
+            }
+          ]
+        },
+        {
+          "path": "Scene/Mesh[5]",
+          "name": "",
+          "type": "Mesh",
+          "instanced": false,
+          "count": 1,
+          "position": [
+            -2.017,
+            0.018,
+            6.124
+          ],
+          "rotation": [
+            0,
+            0.333,
+            0
+          ],
+          "scale": [
+            2.002,
+            4.566,
+            2.064
+          ],
+          "visible": true,
+          "castShadow": false,
+          "receiveShadow": false,
+          "geometry": {
+            "id": "geometry-0",
+            "type": "BoxGeometry",
+            "parameters": {
+              "width": 1,
+              "height": 1,
+              "depth": 1,
+              "widthSegments": 1,
+              "heightSegments": 1,
+              "depthSegments": 1
+            },
+            "vertices": 24,
+            "triangles": 12,
+            "hasNormals": true,
+            "hasUV": false
+          },
+          "materials": [
+            {
+              "id": "material-1",
+              "name": "",
+              "type": "MeshStandardMaterial",
+              "color": "ffffff",
+              "roughness": 1,
+              "metalness": 0,
+              "opacity": 1,
+              "transparent": false,
+              "emissive": "000000",
+              "emissiveIntensity": 1,
+              "map": null,
+              "normalMap": null,
+              "roughnessMap": null,
+              "side": 0
+            }
+          ]
+        },
+        {
+          "path": "Scene/Mesh[6]",
+          "name": "",
+          "type": "Mesh",
+          "instanced": false,
+          "count": 1,
+          "position": [
+            2.291,
+            -0.756,
+            -2.621
+          ],
+          "rotation": [
+            0,
+            -0.286,
+            0
+          ],
+          "scale": [
+            1.546,
+            1.552,
+            1.496
+          ],
+          "visible": true,
+          "castShadow": false,
+          "receiveShadow": false,
+          "geometry": {
+            "id": "geometry-0",
+            "type": "BoxGeometry",
+            "parameters": {
+              "width": 1,
+              "height": 1,
+              "depth": 1,
+              "widthSegments": 1,
+              "heightSegments": 1,
+              "depthSegments": 1
+            },
+            "vertices": 24,
+            "triangles": 12,
+            "hasNormals": true,
+            "hasUV": false
+          },
+          "materials": [
+            {
+              "id": "material-1",
+              "name": "",
+              "type": "MeshStandardMaterial",
+              "color": "ffffff",
+              "roughness": 1,
+              "metalness": 0,
+              "opacity": 1,
+              "transparent": false,
+              "emissive": "000000",
+              "emissiveIntensity": 1,
+              "map": null,
+              "normalMap": null,
+              "roughnessMap": null,
+              "side": 0
+            }
+          ]
+        },
+        {
+          "path": "Scene/Mesh[7]",
+          "name": "",
+          "type": "Mesh",
+          "instanced": false,
+          "count": 1,
+          "position": [
+            -2.193,
+            -0.369,
+            -5.547
+          ],
+          "rotation": [
+            0,
+            0.516,
+            0
+          ],
+          "scale": [
+            3.875,
+            3.487,
+            2.986
+          ],
+          "visible": true,
+          "castShadow": false,
+          "receiveShadow": false,
+          "geometry": {
+            "id": "geometry-0",
+            "type": "BoxGeometry",
+            "parameters": {
+              "width": 1,
+              "height": 1,
+              "depth": 1,
+              "widthSegments": 1,
+              "heightSegments": 1,
+              "depthSegments": 1
+            },
+            "vertices": 24,
+            "triangles": 12,
+            "hasNormals": true,
+            "hasUV": false
+          },
+          "materials": [
+            {
+              "id": "material-1",
+              "name": "",
+              "type": "MeshStandardMaterial",
+              "color": "ffffff",
+              "roughness": 1,
+              "metalness": 0,
+              "opacity": 1,
+              "transparent": false,
+              "emissive": "000000",
+              "emissiveIntensity": 1,
+              "map": null,
+              "normalMap": null,
+              "roughnessMap": null,
+              "side": 0
+            }
+          ]
+        },
+        {
+          "path": "Scene/Mesh[8]",
+          "name": "",
+          "type": "Mesh",
+          "instanced": false,
+          "count": 1,
+          "position": [
+            -16.116,
+            14.37,
+            8.208
+          ],
+          "rotation": [
+            0,
+            0,
+            0
+          ],
+          "scale": [
+            0.1,
+            2.428,
+            2.739
+          ],
+          "visible": true,
+          "castShadow": false,
+          "receiveShadow": false,
+          "geometry": {
+            "id": "geometry-0",
+            "type": "BoxGeometry",
+            "parameters": {
+              "width": 1,
+              "height": 1,
+              "depth": 1,
+              "widthSegments": 1,
+              "heightSegments": 1,
+              "depthSegments": 1
+            },
+            "vertices": 24,
+            "triangles": 12,
+            "hasNormals": true,
+            "hasUV": false
+          },
+          "materials": [
+            {
+              "id": "material-2",
+              "name": "",
+              "type": "MeshBasicMaterial",
+              "color": "ffffff",
+              "opacity": 1,
+              "transparent": false,
+              "map": null,
+              "normalMap": null,
+              "roughnessMap": null,
+              "side": 0
+            }
+          ]
+        },
+        {
+          "path": "Scene/Mesh[9]",
+          "name": "",
+          "type": "Mesh",
+          "instanced": false,
+          "count": 1,
+          "position": [
+            -16.109,
+            18.021,
+            -8.207
+          ],
+          "rotation": [
+            0,
+            0,
+            0
+          ],
+          "scale": [
+            0.1,
+            2.425,
+            2.751
+          ],
+          "visible": true,
+          "castShadow": false,
+          "receiveShadow": false,
+          "geometry": {
+            "id": "geometry-0",
+            "type": "BoxGeometry",
+            "parameters": {
+              "width": 1,
+              "height": 1,
+              "depth": 1,
+              "widthSegments": 1,
+              "heightSegments": 1,
+              "depthSegments": 1
+            },
+            "vertices": 24,
+            "triangles": 12,
+            "hasNormals": true,
+            "hasUV": false
+          },
+          "materials": [
+            {
+              "id": "material-3",
+              "name": "",
+              "type": "MeshBasicMaterial",
+              "color": "ffffff",
+              "opacity": 1,
+              "transparent": false,
+              "map": null,
+              "normalMap": null,
+              "roughnessMap": null,
+              "side": 0
+            }
+          ]
+        },
+        {
+          "path": "Scene/Mesh[10]",
+          "name": "",
+          "type": "Mesh",
+          "instanced": false,
+          "count": 1,
+          "position": [
+            14.904,
+            12.198,
+            -1.832
+          ],
+          "rotation": [
+            0,
+            0,
+            0
+          ],
+          "scale": [
+            0.15,
+            4.265,
+            6.331
+          ],
+          "visible": true,
+          "castShadow": false,
+          "receiveShadow": false,
+          "geometry": {
+            "id": "geometry-0",
+            "type": "BoxGeometry",
+            "parameters": {
+              "width": 1,
+              "height": 1,
+              "depth": 1,
+              "widthSegments": 1,
+              "heightSegments": 1,
+              "depthSegments": 1
+            },
+            "vertices": 24,
+            "triangles": 12,
+            "hasNormals": true,
+            "hasUV": false
+          },
+          "materials": [
+            {
+              "id": "material-4",
+              "name": "",
+              "type": "MeshBasicMaterial",
+              "color": "ffffff",
+              "opacity": 1,
+              "transparent": false,
+              "map": null,
+              "normalMap": null,
+              "roughnessMap": null,
+              "side": 0
+            }
+          ]
+        },
+        {
+          "path": "Scene/Mesh[11]",
+          "name": "",
+          "type": "Mesh",
+          "instanced": false,
+          "count": 1,
+          "position": [
+            -0.462,
+            8.89,
+            14.52
+          ],
+          "rotation": [
+            0,
+            0,
+            0
+          ],
+          "scale": [
+            4.38,
+            5.441,
+            0.088
+          ],
+          "visible": true,
+          "castShadow": false,
+          "receiveShadow": false,
+          "geometry": {
+            "id": "geometry-0",
+            "type": "BoxGeometry",
+            "parameters": {
+              "width": 1,
+              "height": 1,
+              "depth": 1,
+              "widthSegments": 1,
+              "heightSegments": 1,
+              "depthSegments": 1
+            },
+            "vertices": 24,
+            "triangles": 12,
+            "hasNormals": true,
+            "hasUV": false
+          },
+          "materials": [
+            {
+              "id": "material-5",
+              "name": "",
+              "type": "MeshBasicMaterial",
+              "color": "ffffff",
+              "opacity": 1,
+              "transparent": false,
+              "map": null,
+              "normalMap": null,
+              "roughnessMap": null,
+              "side": 0
+            }
+          ]
+        },
+        {
+          "path": "Scene/Mesh[12]",
+          "name": "",
+          "type": "Mesh",
+          "instanced": false,
+          "count": 1,
+          "position": [
+            3.235,
+            11.486,
+            -12.541
+          ],
+          "rotation": [
+            0,
+            0,
+            0
+          ],
+          "scale": [
+            2.5,
+            2,
+            0.1
+          ],
+          "visible": true,
+          "castShadow": false,
+          "receiveShadow": false,
+          "geometry": {
+            "id": "geometry-0",
+            "type": "BoxGeometry",
+            "parameters": {
+              "width": 1,
+              "height": 1,
+              "depth": 1,
+              "widthSegments": 1,
+              "heightSegments": 1,
+              "depthSegments": 1
+            },
+            "vertices": 24,
+            "triangles": 12,
+            "hasNormals": true,
+            "hasUV": false
+          },
+          "materials": [
+            {
+              "id": "material-6",
+              "name": "",
+              "type": "MeshBasicMaterial",
+              "color": "ffffff",
+              "opacity": 1,
+              "transparent": false,
+              "map": null,
+              "normalMap": null,
+              "roughnessMap": null,
+              "side": 0
+            }
+          ]
+        },
+        {
+          "path": "Scene/Mesh[13]",
+          "name": "",
+          "type": "Mesh",
+          "instanced": false,
+          "count": 1,
+          "position": [
+            0,
+            20,
+            0
+          ],
+          "rotation": [
+            0,
+            0,
+            0
+          ],
+          "scale": [
+            1,
+            0.1,
+            1
+          ],
+          "visible": true,
+          "castShadow": false,
+          "receiveShadow": false,
+          "geometry": {
+            "id": "geometry-0",
+            "type": "BoxGeometry",
+            "parameters": {
+              "width": 1,
+              "height": 1,
+              "depth": 1,
+              "widthSegments": 1,
+              "heightSegments": 1,
+              "depthSegments": 1
+            },
+            "vertices": 24,
+            "triangles": 12,
+            "hasNormals": true,
+            "hasUV": false
+          },
+          "materials": [
+            {
+              "id": "material-7",
+              "name": "",
+              "type": "MeshBasicMaterial",
+              "color": "ffffff",
+              "opacity": 1,
+              "transparent": false,
+              "map": null,
+              "normalMap": null,
+              "roughnessMap": null,
+              "side": 0
+            }
+          ]
+        }
+      ],
+      "uniqueGeometries": 1,
+      "materials": 8
+    },
+    "cameraModes": [
+      {
+        "id": "launch",
+        "name": "Launch Site",
+        "icon": "launch",
+        "hint": "Locked on the Iran launch site at OWA release."
+      },
+      {
+        "id": "orbit",
+        "name": "Orbit",
+        "icon": "orbit",
+        "hint": "Cinematic orbit around the live munition."
+      },
+      {
+        "id": "chase",
+        "name": "Chase",
+        "icon": "chase",
+        "hint": "Tail-chase camera riding behind the drone."
+      },
+      {
+        "id": "topdown",
+        "name": "Top-Down",
+        "icon": "topdown",
+        "hint": "Map-style nadir tracking of the corridor."
+      },
+      {
+        "id": "freefly",
+        "name": "Free-Fly",
+        "icon": "freefly",
+        "hint": "Unlocked free-orbit manual camera."
+      },
+      {
+        "id": "thermal",
+        "name": "Thermal/IR",
+        "icon": "thermal",
+        "hint": "EO/IR heat-signature mode (VIIRS-driven)."
+      },
+      {
+        "id": "impact",
+        "name": "Impact",
+        "icon": "impact",
+        "hint": "Locked on the Warda Apartments impact point."
+      },
+      {
+        "id": "cinema",
+        "name": "Cinematic",
+        "icon": "cinema",
+        "hint": "Auto-cut director camera across the corridor."
+      }
+    ],
+    "waypoints": [
+      {
+        "id": "WP1",
+        "name": "Bandar Abbas (launch)",
+        "lat": 27.1842023,
+        "lon": 56.2892533,
+        "legOrder": 1,
+        "phase": "Launch",
+        "note": "Bandar Abbas, Hormozgan \u2014 OWA release, climb to cruise."
+      },
+      {
+        "id": "WP2",
+        "name": "Strait of Hormuz",
+        "lat": 26.566,
+        "lon": 56.247,
+        "legOrder": 2,
+        "phase": "Ingress",
+        "note": "Crosses the Strait of Hormuz chokepoint at cruise altitude."
+      },
+      {
+        "id": "WP3",
+        "name": "Southern Gulf",
+        "lat": 25.98,
+        "lon": 55.95,
+        "legOrder": 3,
+        "phase": "Transit",
+        "note": "Mid-Gulf transit leg, terrain-masking over open water."
+      },
+      {
+        "id": "WP4",
+        "name": "UAE Coast-In",
+        "lat": 25.52,
+        "lon": 55.56,
+        "legOrder": 4,
+        "phase": "Coast-in",
+        "note": "Feet-dry over the Sharjah/Dubai littoral."
+      },
+      {
+        "id": "WP5",
+        "name": "Terminal Approach",
+        "lat": 25.3,
+        "lon": 55.47,
+        "legOrder": 5,
+        "phase": "Terminal",
+        "note": "Descent and terminal run-in toward Al Warqa, Dubai."
+      },
+      {
+        "id": "WP6",
+        "name": "Jenna/Warda (impact)",
+        "lat": 25.1857908,
+        "lon": 55.4045442,
+        "legOrder": 6,
+        "phase": "Impact",
+        "note": "Terminal nose-down dive onto Jenna Apartments (Warda), Al Warqa\u2019a 1, Dubai."
+      }
+    ],
+    "thermalCount": 10,
+    "thermalAlerts": 8,
+    "quality": {
+      "performance": {
+        "label": "Performance",
+        "pixelRatio": 1,
+        "shadowSize": 512,
+        "shadows": false,
+        "msaa": 1,
+        "globeSSE": 4,
+        "tileCache": 256,
+        "ao": false,
+        "bloom": false,
+        "particles": 0.35,
+        "inspectorHz": 30,
+        "hdrEnvironment": false,
+        "textureSize": 256,
+        "anisotropy": 2,
+        "microdetail": false
+      },
+      "balanced": {
+        "label": "Balanced",
+        "pixelRatio": 1.5,
+        "shadowSize": 1024,
+        "shadows": true,
+        "msaa": 2,
+        "globeSSE": 2.5,
+        "tileCache": 512,
+        "ao": false,
+        "bloom": true,
+        "particles": 0.65,
+        "inspectorHz": 45,
+        "hdrEnvironment": true,
+        "textureSize": 512,
+        "anisotropy": 4,
+        "microdetail": true
+      },
+      "high": {
+        "label": "High detail",
+        "pixelRatio": 1.75,
+        "shadowSize": 2048,
+        "shadows": true,
+        "msaa": 4,
+        "globeSSE": 1.5,
+        "tileCache": 768,
+        "ao": true,
+        "bloom": true,
+        "particles": 1,
+        "inspectorHz": 60,
+        "hdrEnvironment": true,
+        "textureSize": 512,
+        "anisotropy": 8,
+        "microdetail": true
+      }
+    },
+    "presentationClock": "2025-06-21T08:00:00Z",
+    "method": "CPU-instantiated source objects + source configuration; not GPU runtime inventory"
+  },
+  "glb": [
+    {
+      "mesh_index": 0,
+      "mesh_name": "geometry_0",
+      "node": "part_0",
+      "vertices": 58,
+      "triangles": 112,
+      "attributes": [
+        "POSITION",
+        "NORMAL",
+        "TEXCOORD_0"
+      ],
+      "material_index": 0,
+      "material": {
+        "pbrMetallicRoughness": {
+          "baseColorFactor": [
+            1,
+            1,
+            1,
+            1
+          ],
+          "roughnessFactor": 0.65,
+          "metallicFactor": 0.02,
+          "baseColorTexture": {
+            "index": 0,
+            "texCoord": 0
+          }
+        },
+        "doubleSided": false,
+        "name": "matte-composite",
+        "alphaMode": "OPAQUE"
+      }
+    },
+    {
+      "mesh_index": 1,
+      "mesh_name": "geometry_1",
+      "node": "part_1",
+      "vertices": 30,
+      "triangles": 56,
+      "attributes": [
+        "POSITION",
+        "NORMAL",
+        "TEXCOORD_0"
+      ],
+      "material_index": 1,
+      "material": {
+        "pbrMetallicRoughness": {
+          "baseColorFactor": [
+            1,
+            1,
+            1,
+            1
+          ],
+          "roughnessFactor": 0.58,
+          "metallicFactor": 0.01,
+          "baseColorTexture": {
+            "index": 0,
+            "texCoord": 0
+          }
+        },
+        "doubleSided": false,
+        "name": "painted-cover",
+        "alphaMode": "OPAQUE"
+      }
+    },
+    {
+      "mesh_index": 2,
+      "mesh_name": "geometry_2",
+      "node": "part_2",
+      "vertices": 58,
+      "triangles": 112,
+      "attributes": [
+        "POSITION",
+        "NORMAL",
+        "TEXCOORD_0"
+      ],
+      "material_index": 1,
+      "material": {
+        "pbrMetallicRoughness": {
+          "baseColorFactor": [
+            1,
+            1,
+            1,
+            1
+          ],
+          "roughnessFactor": 0.58,
+          "metallicFactor": 0.01,
+          "baseColorTexture": {
+            "index": 0,
+            "texCoord": 0
+          }
+        },
+        "doubleSided": false,
+        "name": "painted-cover",
+        "alphaMode": "OPAQUE"
+      }
+    },
+    {
+      "mesh_index": 3,
+      "mesh_name": "geometry_3",
+      "node": "part_3",
+      "vertices": 50,
+      "triangles": 96,
+      "attributes": [
+        "POSITION",
+        "NORMAL",
+        "TEXCOORD_0"
+      ],
+      "material_index": 2,
+      "material": {
+        "pbrMetallicRoughness": {
+          "baseColorFactor": [
+            0.28,
+            0.31,
+            0.3,
+            1
+          ],
+          "roughnessFactor": 0.44,
+          "metallicFactor": 0.75
+        },
+        "doubleSided": false,
+        "name": "satin-metal",
+        "alphaMode": "OPAQUE"
+      }
+    },
+    {
+      "mesh_index": 4,
+      "mesh_name": "geometry_4",
+      "node": "part_4",
+      "vertices": 36,
+      "triangles": 12,
+      "attributes": [
+        "POSITION",
+        "NORMAL",
+        "TEXCOORD_0"
+      ],
+      "material_index": 3,
+      "material": {
+        "pbrMetallicRoughness": {
+          "baseColorFactor": [
+            1,
+            1,
+            1,
+            1
+          ],
+          "roughnessFactor": 0.67,
+          "metallicFactor": 0.02,
+          "baseColorTexture": {
+            "index": 0,
+            "texCoord": 0
+          }
+        },
+        "doubleSided": false,
+        "name": "wing-coating",
+        "alphaMode": "OPAQUE"
+      }
+    },
+    {
+      "mesh_index": 5,
+      "mesh_name": "geometry_5",
+      "node": "part_5",
+      "vertices": 36,
+      "triangles": 12,
+      "attributes": [
+        "POSITION",
+        "NORMAL",
+        "TEXCOORD_0"
+      ],
+      "material_index": 3,
+      "material": {
+        "pbrMetallicRoughness": {
+          "baseColorFactor": [
+            1,
+            1,
+            1,
+            1
+          ],
+          "roughnessFactor": 0.67,
+          "metallicFactor": 0.02,
+          "baseColorTexture": {
+            "index": 0,
+            "texCoord": 0
+          }
+        },
+        "doubleSided": false,
+        "name": "wing-coating",
+        "alphaMode": "OPAQUE"
+      }
+    },
+    {
+      "mesh_index": 6,
+      "mesh_name": "geometry_6",
+      "node": "part_6",
+      "vertices": 36,
+      "triangles": 12,
+      "attributes": [
+        "POSITION",
+        "NORMAL",
+        "TEXCOORD_0"
+      ],
+      "material_index": 4,
+      "material": {
+        "pbrMetallicRoughness": {
+          "baseColorFactor": [
+            0.69,
+            0.64,
+            0.42,
+            1
+          ],
+          "roughnessFactor": 0.6,
+          "metallicFactor": 0.02
+        },
+        "doubleSided": false,
+        "name": "identification-paint",
+        "alphaMode": "OPAQUE"
+      }
+    },
+    {
+      "mesh_index": 7,
+      "mesh_name": "geometry_7",
+      "node": "part_7",
+      "vertices": 36,
+      "triangles": 12,
+      "attributes": [
+        "POSITION",
+        "NORMAL",
+        "TEXCOORD_0"
+      ],
+      "material_index": 4,
+      "material": {
+        "pbrMetallicRoughness": {
+          "baseColorFactor": [
+            0.69,
+            0.64,
+            0.42,
+            1
+          ],
+          "roughnessFactor": 0.6,
+          "metallicFactor": 0.02
+        },
+        "doubleSided": false,
+        "name": "identification-paint",
+        "alphaMode": "OPAQUE"
+      }
+    },
+    {
+      "mesh_index": 8,
+      "mesh_name": "geometry_8",
+      "node": "part_8",
+      "vertices": 36,
+      "triangles": 12,
+      "attributes": [
+        "POSITION",
+        "NORMAL",
+        "TEXCOORD_0"
+      ],
+      "material_index": 5,
+      "material": {
+        "pbrMetallicRoughness": {
+          "baseColorFactor": [
+            0.1,
+            0.13,
+            0.12,
+            1
+          ],
+          "roughnessFactor": 0.67,
+          "metallicFactor": 0.1
+        },
+        "doubleSided": false,
+        "name": "dark-composite",
+        "alphaMode": "OPAQUE"
+      }
+    },
+    {
+      "mesh_index": 9,
+      "mesh_name": "geometry_9",
+      "node": "part_9",
+      "vertices": 36,
+      "triangles": 12,
+      "attributes": [
+        "POSITION",
+        "NORMAL",
+        "TEXCOORD_0"
+      ],
+      "material_index": 5,
+      "material": {
+        "pbrMetallicRoughness": {
+          "baseColorFactor": [
+            0.1,
+            0.13,
+            0.12,
+            1
+          ],
+          "roughnessFactor": 0.67,
+          "metallicFactor": 0.1
+        },
+        "doubleSided": false,
+        "name": "dark-composite",
+        "alphaMode": "OPAQUE"
+      }
+    },
+    {
+      "mesh_index": 10,
+      "mesh_name": "geometry_10",
+      "node": "part_10",
+      "vertices": 30,
+      "triangles": 56,
+      "attributes": [
+        "POSITION",
+        "NORMAL",
+        "TEXCOORD_0"
+      ],
+      "material_index": 6,
+      "material": {
+        "pbrMetallicRoughness": {
+          "baseColorFactor": [
+            0.3,
+            0.33,
+            0.34,
+            1
+          ],
+          "roughnessFactor": 0.4,
+          "metallicFactor": 0.82
+        },
+        "doubleSided": false,
+        "name": "metal-fitting",
+        "alphaMode": "OPAQUE"
+      }
+    },
+    {
+      "mesh_index": 11,
+      "mesh_name": "geometry_11",
+      "node": "part_11",
+      "vertices": 36,
+      "triangles": 12,
+      "attributes": [
+        "POSITION",
+        "NORMAL",
+        "TEXCOORD_0"
+      ],
+      "material_index": 5,
+      "material": {
+        "pbrMetallicRoughness": {
+          "baseColorFactor": [
+            0.1,
+            0.13,
+            0.12,
+            1
+          ],
+          "roughnessFactor": 0.67,
+          "metallicFactor": 0.1
+        },
+        "doubleSided": false,
+        "name": "dark-composite",
+        "alphaMode": "OPAQUE"
+      }
+    },
+    {
+      "mesh_index": 12,
+      "mesh_name": "geometry_12",
+      "node": "part_12",
+      "vertices": 36,
+      "triangles": 12,
+      "attributes": [
+        "POSITION",
+        "NORMAL",
+        "TEXCOORD_0"
+      ],
+      "material_index": 5,
+      "material": {
+        "pbrMetallicRoughness": {
+          "baseColorFactor": [
+            0.1,
+            0.13,
+            0.12,
+            1
+          ],
+          "roughnessFactor": 0.67,
+          "metallicFactor": 0.1
+        },
+        "doubleSided": false,
+        "name": "dark-composite",
+        "alphaMode": "OPAQUE"
+      }
+    },
+    {
+      "mesh_index": 13,
+      "mesh_name": "geometry_13",
+      "node": "part_13",
+      "vertices": 162,
+      "triangles": 320,
+      "attributes": [
+        "POSITION",
+        "NORMAL",
+        "TEXCOORD_0"
+      ],
+      "material_index": 7,
+      "material": {
+        "pbrMetallicRoughness": {
+          "baseColorFactor": [
+            0.025,
+            0.045,
+            0.055,
+            1
+          ],
+          "roughnessFactor": 0.12,
+          "metallicFactor": 0
+        },
+        "doubleSided": false,
+        "name": "optical-cover",
+        "alphaMode": "OPAQUE"
+      }
+    }
+  ],
+  "compression": {
+    "claimed": false,
+    "reason": "No Draco,Meshopt,KTX2/Basis encoder/loaderend-to-end path added. PNG/JPEG and coreglTF2embeddedJPEG only."
+  },
+  "platforms": "Existing React/Vite/Cesium/Three browser app. Desktop high default;mobileperformance default;browsercompatibility requiresruntimeverification."
+}

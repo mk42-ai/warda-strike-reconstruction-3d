@@ -67,7 +67,8 @@ body {
 
 .app { position: fixed; inset: 0; }
 .cesium-host { position: absolute; inset: var(--cls-h) 0 0 0; }
-.cesium-host .cesium-viewer-bottom, .cesium-host .cesium-widget-credits { display: none !important; }
+.cesium-host .cesium-viewer-bottom { display: block !important; bottom: 2px; z-index: 56; max-width: calc(100% - 24px); }
+.cesium-host .cesium-widget-credits { display: block !important; font-size: 9px; }
 
 /* brand HUD frame overlay */
 .hud-frame { position: absolute; inset: 0; pointer-events: none; z-index: 40; }
@@ -891,4 +892,19 @@ body {
   .co-strike-impact { font-size: 12px; letter-spacing: 0.6px; }
   .co-dot { width: 14px; height: 14px; }
   .co-status-dot { width: 10px; height: 10px; margin-left: 10px; }
+}
+
+
+/* Renderer settings remain available when side rails collapse on mobile. */
+.quality-dock { position: fixed; left: 50%; bottom: 156px; transform: translateX(-50%); z-index: 56; display: flex; align-items: center; gap: 8px; padding: 7px 10px; border: 1px solid #375448; border-radius: 6px; background: #0b1715; color: #e6f2ec; font: 11px var(--mono); max-width: calc(100vw - 16px); }
+.quality-dock label { white-space: nowrap; }
+.quality-dock select { background: #152820; color: #e6f2ec; border: 1px solid #527865; border-radius: 4px; padding: 5px; max-width: 130px; }
+.quality-dock a { color: #b1dbc6; white-space: nowrap; }
+.quality-dock select:focus-visible, .quality-dock a:focus-visible { outline: 2px solid #b1dbc6; outline-offset: 3px; }
+.render-error { position: fixed; top: 100px; left: 30%; right: 30%; z-index: 100; background: #2d1717; border: 1px solid #b67f74; color: #fff2e8; padding: 14px; border-radius: 6px; }
+.inspector canvas { touch-action: none; }
+@media (max-width: 720px) {
+  .quality-dock { bottom: 82px; font-size: 10px; }
+  .quality-dock a { display: none; }
+  .render-error { left: 12px; right: 12px; }
 }

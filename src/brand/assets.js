@@ -120,7 +120,7 @@ export function waypointMarker(n, active = false) {
   const ink = active ? '#072A20' : '#7BE0AD';
   const ring = active ? '#E8FFF5' : '#36C98D';
   return `
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 56">
+<svg xmlns="http://www.w3.org/2000/svg" width="48" height="56" viewBox="0 0 48 56">
   <path d="M24 54 C8 36 4 28 4 20 a20 20 0 0 1 40 0 c0 8-4 16-20 34z" fill="${fill}" stroke="${ring}" stroke-width="2.5"/>
   <circle cx="24" cy="20" r="12" fill="#072A20" stroke="${ring}" stroke-width="1.5"/>
   <text x="24" y="25.5" text-anchor="middle" font-family="'Segoe UI',Arial,sans-serif" font-size="15" font-weight="800" fill="${ink}">${n}</text>
@@ -129,7 +129,7 @@ export function waypointMarker(n, active = false) {
 
 // ---- Thermal alert icon (suspicious heat) -----------------------------------
 export const THERMAL_ALERT = `
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48">
+<svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 48 48">
   <path d="M24 4 L44 40 H4 Z" fill="#1a0d00" stroke="#ff7a18" stroke-width="2.5"/>
   <path d="M24 14 c4 4 5 7 5 10 a5 5 0 1 1-10 0 c0-3 1-6 5-10z" fill="#ff453a"/>
   <rect x="22.5" y="22" width="3" height="9" rx="1.5" fill="#ffcf3f"/>
@@ -147,8 +147,8 @@ export const GEOFENCE_RING = `
 
 // Marker billboards as data-URIs for Cesium
 export const MARKER_URIS = {
-  launch: svgToDataUri(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 56"><path d="M24 54 C8 36 4 28 4 20 a20 20 0 0 1 40 0 c0 8-4 16-20 34z" fill="#ff453a" stroke="#fff" stroke-width="2.5"/><circle cx="24" cy="20" r="11" fill="#1a0d00" stroke="#fff" stroke-width="1.5"/><path d="M24 13c3 2.4 4 5 4 7l-4 3-4-3c0-2 1-4.6 4-7z" fill="#ffcf3f"/></svg>`),
-  impact: svgToDataUri(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 56"><path d="M24 54 C8 36 4 28 4 20 a20 20 0 0 1 40 0 c0 8-4 16-20 34z" fill="#af52de" stroke="#fff" stroke-width="2.5"/><circle cx="24" cy="20" r="11" fill="#1a0a1f" stroke="#fff" stroke-width="1.5"/><circle cx="24" cy="20" r="6" fill="none" stroke="#ff7a18" stroke-width="2"/><circle cx="24" cy="20" r="1.6" fill="#ff453a"/></svg>`),
+  launch: svgToDataUri(`<svg xmlns="http://www.w3.org/2000/svg" width="48" height="56" viewBox="0 0 48 56"><path d="M24 54 C8 36 4 28 4 20 a20 20 0 0 1 40 0 c0 8-4 16-20 34z" fill="#ff453a" stroke="#fff" stroke-width="2.5"/><circle cx="24" cy="20" r="11" fill="#1a0d00" stroke="#fff" stroke-width="1.5"/><path d="M24 13c3 2.4 4 5 4 7l-4 3-4-3c0-2 1-4.6 4-7z" fill="#ffcf3f"/></svg>`),
+  impact: svgToDataUri(`<svg xmlns="http://www.w3.org/2000/svg" width="48" height="56" viewBox="0 0 48 56"><path d="M24 54 C8 36 4 28 4 20 a20 20 0 0 1 40 0 c0 8-4 16-20 34z" fill="#af52de" stroke="#fff" stroke-width="2.5"/><circle cx="24" cy="20" r="11" fill="#1a0a1f" stroke="#fff" stroke-width="1.5"/><circle cx="24" cy="20" r="6" fill="none" stroke="#ff7a18" stroke-width="2"/><circle cx="24" cy="20" r="1.6" fill="#ff453a"/></svg>`),
   shahed: svgToDataUri(SHAHED_GLYPH),
   thermalAlert: svgToDataUri(THERMAL_ALERT),
 };
